@@ -167,7 +167,7 @@ export default function SignUpPage() {
           {/* Social Signup */}
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 h-[44px]">
-              <div className="flex items-center justify-center border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors overflow-hidden">
+              <div className="flex items-center justify-center rounded-lg overflow-hidden">
                 <GoogleLogin
                   onSuccess={handleGoogleSuccess}
                   onError={() => {
@@ -178,6 +178,7 @@ export default function SignUpPage() {
                   shape="rectangular"
                   text="signup_with"
                   size="large"
+                  width="100%"
                 />
               </div>
 
