@@ -10,10 +10,20 @@ export const metadata: Metadata = {
 };
 
 
+// @ts-ignore
+import { GoogleOAuthProvider } from '@react-oauth/google';
+
 export default function RootLayout({ children }: { children: ReactNode }) {
+  // We should ideally use env var here, but for dev putting a placeholder
+  const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "1234567890-mockclientid.apps.googleusercontent.com";
+
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+          {children}
+        </GoogleOAuthProvider>
+      </body>
     </html>
   );
 }

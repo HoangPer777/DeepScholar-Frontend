@@ -1,91 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   color-scheme: light;
-  --bg: #f4efe6;
-  --panel: rgba(255, 251, 244, 0.84);
-  --text: #1e1a16;
-  --muted: #665d53;
-  --accent: #8f3d2e;
-  --accent-2: #2e5f72;
 }
 
 * {
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
+  min-height: 100%;
+}
+
+body {
   min-height: 100vh;
-  font-family: Georgia, "Times New Roman", serif;
-  background:
-    radial-gradient(circle at top left, rgba(143, 61, 46, 0.18), transparent 32%),
-    radial-gradient(circle at bottom right, rgba(46, 95, 114, 0.18), transparent 28%),
-    linear-gradient(135deg, #f7f1e8 0%, #efe3d3 100%);
-  color: var(--text);
-}
-
-.page-shell {
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
-  padding: 24px;
-}
-
-.hero-card {
-  width: min(860px, 100%);
-  padding: 40px;
-  border: 1px solid rgba(30, 26, 22, 0.08);
-  border-radius: 28px;
-  background: var(--panel);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 24px 60px rgba(30, 26, 22, 0.12);
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--accent);
-}
-
-h1 {
-  margin: 0;
-  font-size: clamp(2.4rem, 5vw, 4.5rem);
-  line-height: 0.98;
-}
-
-.lede {
-  max-width: 62ch;
-  font-size: 1.06rem;
-  line-height: 1.7;
-  color: var(--muted);
-}
-
-.endpoint-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  margin-top: 28px;
-}
-
-.endpoint-grid article {
-  padding: 20px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.66);
-  border: 1px solid rgba(30, 26, 22, 0.08);
-}
-
-.endpoint-grid h2 {
-  margin-top: 0;
-}
-
-.endpoint-grid p {
-  margin-bottom: 0;
-  color: var(--accent-2);
-  word-break: break-word;
-}
-
-@media (max-width: 640px) {
-  .hero-card {
-    padding: 28px;
-  }
 }

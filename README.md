@@ -33,9 +33,9 @@ Currently, this is a minimal Next.js setup with:
 ## 📋 Planned Features (To Be Implemented)
 
 ### Authentication UI
-- [ ] Sign up / Login forms
-- [ ] Google OAuth integration
-- [ ] Facebook OAuth integration
+- [x] Sign up / Login forms
+- [ ] Google OAuth integration (credentials needed - see [OAUTH_SETUP.md](./OAUTH_SETUP.md))
+- [ ] Facebook OAuth integration (credentials needed - see [OAUTH_SETUP.md](./OAUTH_SETUP.md))
 - [ ] User profile/settings page
 - [ ] Logout flow
 
@@ -85,11 +85,17 @@ frontend/
 ### Environment Variables (.env.local)
 
 ```env
-NEXT_PUBLIC_BACKEND_URL=http://localhost:8001/api/v1
-NEXT_PUBLIC_AI_URL=http://localhost:8002/api
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000/api/v1
+NEXT_PUBLIC_AI_URL=http://localhost:8001/api
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com
+NEXT_PUBLIC_FACEBOOK_APP_ID=YOUR_FACEBOOK_APP_ID
 ```
 
 These are exposed to the browser (NEXT_PUBLIC_ prefix).
+
+**⚠️ OAuth Setup Required:**
+To use Google and Facebook login, you must set up OAuth credentials.
+See [OAUTH_SETUP.md](./OAUTH_SETUP.md) for detailed instructions.
 
 ## 📦 Tech Stack
 
@@ -131,8 +137,15 @@ docker run -p 3000:3000 deepscholar-frontend
 
 Or via docker-compose:
 ```bash
-docker compose up frontend
+docker compose up --build frontend
 ```
+
+For development with hot reload, use:
+```bash
+docker compose up --build
+```
+
+Then open `http://localhost:3000`.
 
 ## 📝 Development Tips
 

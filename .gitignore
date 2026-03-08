@@ -35,3 +35,5 @@ coverage/
 *.log
 *.pem
 
+*.md
+!README.md
