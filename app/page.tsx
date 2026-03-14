@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   Atom,
   BadgeCheck,
@@ -102,9 +103,8 @@ export default function HomePage() {
     <main className="min-h-screen bg-[#f6f6f8] text-slate-900">
       <div className="mx-auto flex w-full max-w-[1700px]">
         <aside
-          className={`sticky top-0 hidden h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 lg:flex lg:flex-col ${
-            sidebarCollapsed ? 'w-20' : 'w-64'
-          }`}
+          className={`sticky top-0 hidden h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 lg:flex lg:flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'
+            }`}
         >
           <button
             type="button"
@@ -137,9 +137,8 @@ export default function HomePage() {
                   <button
                     key={item.label}
                     type="button"
-                    className={`flex w-full rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-left text-indigo-700 shadow-[0_0_15px_rgba(19,91,236,0.2)] ${
-                      sidebarCollapsed ? 'items-center justify-center' : 'items-center justify-between'
-                    }`}
+                    className={`flex w-full rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-left text-indigo-700 shadow-[0_0_15px_rgba(19,91,236,0.2)] ${sidebarCollapsed ? 'items-center justify-center' : 'items-center justify-between'
+                      }`}
                     title={sidebarCollapsed ? item.label : undefined}
                   >
                     <span className={`flex items-center ${sidebarCollapsed ? '' : 'gap-3'}`}>
@@ -157,9 +156,8 @@ export default function HomePage() {
                 <button
                   key={item.label}
                   type="button"
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors ${
-                    item.active ? 'bg-blue-50 text-[#135bec]' : 'text-slate-600 hover:bg-slate-50'
-                  }`}
+                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors ${item.active ? 'bg-blue-50 text-[#135bec]' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
                   title={sidebarCollapsed ? item.label : undefined}
                 >
                   <Icon size={18} />
@@ -192,9 +190,8 @@ export default function HomePage() {
 
           <div className="border-t border-slate-200 p-4">
             <button
-              className={`flex w-full items-center justify-center rounded-lg bg-[#135bec] py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 ${
-                sidebarCollapsed ? 'gap-0 px-0' : 'gap-2'
-              }`}
+              className={`flex w-full items-center justify-center rounded-lg bg-[#135bec] py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 ${sidebarCollapsed ? 'gap-0 px-0' : 'gap-2'
+                }`}
               title={sidebarCollapsed ? 'AI Assistant' : undefined}
             >
               <Bot size={18} />
@@ -219,10 +216,10 @@ export default function HomePage() {
                 <Bell size={17} />
               </button>
 
-              <button className="flex h-10 items-center gap-2 rounded-[10px] bg-[#1f5fe4] px-4 text-sm font-bold text-white transition hover:bg-[#1a53c8]">
+              <Link href="/upload" className="flex h-10 items-center gap-2 rounded-[10px] bg-[#1f5fe4] px-4 text-sm font-bold text-white transition hover:bg-[#1a53c8]">
                 <FileUp size={16} />
                 Upload Paper
-              </button>
+              </Link>
 
               <button className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ecd6c3] text-sm font-bold text-white">
                 T
