@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Scholar AI - Upload Paper</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2513ec",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#121022",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .step-active {
+            color: #2513ec;
+        }
+        .step-inactive {
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="flex h-screen overflow-hidden">
+<!-- Sidebar Navigation -->
+<aside class="w-72 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col">
+<div class="p-6 flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center overflow-hidden">
+<img alt="Neural Atom logo" class="w-8 h-8 object-contain" data-alt="Stylized neural network atom logo icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvjNJZsUlE4SpQaWH_lAqzBeUWUIKT9u4nIV6DO-MkJMpHd3S6BdVHvBej5yG_t_KB0886-9UPU6rszL3YT6hZBkVeghirnvzaE8qogo25y4MYtW4hWJly10Ni6cRwU3qztR3XTqNu-a8SlFPTUZVxzJtDhsV-v2AawY4_N-FWYwfL_xwBht_K0lHN6uFdsgy3iRS8oSnKNNKUQoFPhACWeUZ7EkY7GuFeTqAqjvwokxKCaLr-oKS2FmBcgwv2bCX6zr81moFK2smi"/>
+</div>
+<div>
+<h1 class="font-display font-bold text-lg leading-tight">Scholar AI</h1>
+<p class="text-xs text-slate-500 font-medium">Research Intelligence</p>
+</div>
+</div>
+<nav class="flex-1 px-4 py-6 space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-slate-500">dashboard</span>
+<span class="font-medium text-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary/10 text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">upload_file</span>
+<span class="font-medium text-sm">Upload Paper</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-slate-500">auto_stories</span>
+<span class="font-medium text-sm">Library</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-slate-500">smart_toy</span>
+<span class="font-medium text-sm">AI Agents</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined text-slate-500">settings</span>
+<span class="font-medium text-sm">Settings</span>
+</a>
+</nav>
+<div class="p-6 border-t border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center overflow-hidden">
+<img alt="User avatar" class="w-full h-full object-cover" data-alt="Professional profile headshot for a researcher" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsss4KcH0qeVZpWvobVLif5nGbeHpQYLLdA6D1UyChNl4mDnbRLPslJCqy1TSDojfMId25_j8Ev_e_EpB0mka0XbKZdYv8y2X6VVoXpGX6N_qe9AnW-qazXx3BT8OYj5_n9EFKOX8ZZhK6QkNCTlcsP5D87ZTBYAhI42Coy7xCFjc8GfLl6P3INdQZmo0pbGe_m6bQ0j9LZENof6Ohk3vfc7jKHHB8iZPQ8rX0x8Rbnt4SjRPa5rP-gJ96kKeo1q7teZagXFdjxH5T"/>
+</div>
+<div>
+<p class="text-sm font-bold">Dr. Aris Thorne</p>
+<p class="text-xs text-slate-500">Premium Plan</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 overflow-y-auto bg-background-light dark:bg-background-dark">
+<div class="max-w-4xl mx-auto py-12 px-8">
+<!-- Header -->
+<header class="mb-10">
+<h2 class="text-4xl font-bold font-display tracking-tight mb-2">Upload Research Paper</h2>
+<p class="text-slate-600 dark:text-slate-400 text-lg">Initialize the AI Multi-Agent pipeline for deep synthesis and verification.</p>
+</header>
+<!-- Progress Indicator -->
+<div class="mb-12 bg-white dark:bg-slate-900 p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<div class="flex flex-col items-center gap-2 group">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-xl">assignment</span>
+</div>
+<span class="text-sm font-bold text-primary">Planning</span>
+</div>
+<div class="flex-1 h-[2px] mx-4 bg-primary mb-6"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-10 h-10 rounded-full border-2 border-primary bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-xl">menu_book</span>
+</div>
+<span class="text-sm font-bold text-primary">Reading</span>
+</div>
+<div class="flex-1 h-[2px] mx-4 bg-slate-200 dark:bg-slate-800 mb-6"></div>
+<div class="flex flex-col items-center gap-2 opacity-40">
+<div class="w-10 h-10 rounded-full border-2 border-slate-300 dark:border-slate-700 flex items-center justify-center text-slate-400">
+<span class="material-symbols-outlined text-xl">verified_user</span>
+</div>
+<span class="text-sm font-bold">Verifying</span>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-end">
+<span class="text-sm font-medium text-slate-500 uppercase tracking-widest">Active Pipeline Step: Reading (66%)</span>
+</div>
+<div class="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-2/3 transition-all"></div>
+</div>
+</div>
+</div>
+<!-- Drag & Drop Zone -->
+<div class="mb-10">
+<div class="relative group cursor-pointer border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-12 flex flex-col items-center justify-center gap-4 bg-white/50 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-900 hover:border-primary transition-all duration-300">
+<div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-2">
+<span class="material-symbols-outlined text-3xl">upload</span>
+</div>
+<div class="text-center">
+<h3 class="text-xl font-bold font-display">Drag and drop PDF here</h3>
+<p class="text-slate-500 dark:text-slate-400 mt-1">High-fidelity multi-agent processing optimized for PDF documents.</p>
+</div>
+<button class="mt-4 px-8 py-3 bg-primary text-white rounded-lg font-bold hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
+                            Select File
+                        </button>
+</div>
+</div>
+<!-- Metadata Review Section -->
+<section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+<h3 class="font-display font-bold text-xl">Extraction Review</h3>
+<span class="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs font-bold rounded-full uppercase tracking-wider">Validated by Agent #4</span>
+</div>
+<div class="p-8 space-y-8">
+<div>
+<label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Title</label>
+<p class="text-xl font-bold leading-tight">Attention is All You Need: Large Language Model Architectures and Neural Scaling Laws</p>
+</div>
+<div class="grid grid-cols-2 gap-8">
+<div>
+<label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Authors</label>
+<div class="flex flex-wrap gap-2">
+<span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded text-sm font-medium">Ashish Vaswani</span>
+<span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded text-sm font-medium">Noam Shazeer</span>
+<span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded text-sm font-medium">Niki Parmar</span>
+</div>
+</div>
+<div>
+<label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Journal/Source</label>
+<p class="text-sm font-medium text-slate-700 dark:text-slate-300 italic">Advances in Neural Information Processing Systems (NeurIPS)</p>
+</div>
+</div>
+<div>
+<label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Abstract Preview</label>
+<div class="relative">
+<p class="text-slate-600 dark:text-slate-400 leading-relaxed text-sm">
+                                    The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely...
+                                </p>
+<div class="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white dark:from-slate-900 to-transparent"></div>
+</div>
+</div>
+<div class="flex items-center justify-between pt-6 border-t border-slate-100 dark:border-slate-800">
+<button class="flex items-center gap-2 text-primary font-bold text-sm hover:underline">
+<span class="material-symbols-outlined">visibility</span>
+                                View Full Content
+                            </button>
+<div class="flex gap-4">
+<button class="px-6 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                    Edit Details
+                                </button>
+<button class="px-6 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors">
+                                    Confirm &amp; Process
+                                </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Footer Support -->
+<footer class="mt-12 flex justify-center text-slate-400 dark:text-slate-600">
+<div class="flex items-center gap-8 text-xs font-medium uppercase tracking-widest">
+<a class="hover:text-primary transition-colors" href="#">API documentation</a>
+<a class="hover:text-primary transition-colors" href="#">Privacy protocol</a>
+<a class="hover:text-primary transition-colors" href="#">Support center</a>
+</div>
+</footer>
+</div>
+</main>
+</div>
+</body></html>

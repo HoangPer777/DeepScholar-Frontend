@@ -42,7 +42,7 @@ interface ArticleData {
 }
 
 const POLLING_INTERVAL_MS = 5000;  // Poll every 5 seconds
-const POLLING_MAX_ATTEMPTS = 24;   // Max 2 minutes of polling
+const POLLING_MAX_ATTEMPTS = 60;   // Max 5 minutes of polling (60 * 5s)
 
 export default function UploadPage() {
     const router = useRouter();
@@ -206,19 +206,39 @@ export default function UploadPage() {
                     body: JSON.stringify({
                         pdf_url: public_url,
                         slug: articleData.slug,
-                        article_id: articleData.id ?? 1,
+                        article_id: articleData.id,
                     }),
                 }
             );
 
             if (!aiRes.ok) {
-                console.warn('AI Service trigger failed — check if AI Service is running on port 8001.');
+                const errorData = await aiRes.json().catch(() => ({}));
+                console.warn('AI Service trigger failed:', errorData.error || aiRes.statusText);
+                // Even if trigger fails, we try polling once just in case it started anyway
+                startPolling(articleData.slug);
+                return;
             }
 
-            setProgress(75);
+            const result = await aiRes.json();
+            setProgress(90);
 
-            // ── 5. Poll the Backend until extracted data is available ───────
-            startPolling(articleData.slug);
+            // ── 5. Check if result is synchronous or needs polling ───────
+            if (result.status === 'completed' && result.data) {
+                // Synchronous success! No need to poll.
+                const extracted = result.data;
+                setArticle({
+                    ...articleData,
+                    title: extracted.title,
+                    abstract: extracted.abstract,
+                    content: extracted.content
+                });
+                setProgress(100);
+                setStep('done');
+                setStatusMsg('Extraction complete!');
+            } else {
+                // Background task started, start polling
+                startPolling(articleData.slug);
+            }
 
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'Unknown error occurred.';
