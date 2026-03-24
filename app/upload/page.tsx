@@ -20,6 +20,9 @@ import {
     FileText,
     AlignLeft,
     BookOpen,
+    Edit3,
+    Save,
+    X,
 } from 'lucide-react';
 
 const navItems = [
@@ -42,7 +45,7 @@ interface ArticleData {
 }
 
 const POLLING_INTERVAL_MS = 5000;  // Poll every 5 seconds
-const POLLING_MAX_ATTEMPTS = 60;   // Max 5 minutes of polling (60 * 5s)
+const POLLING_MAX_ATTEMPTS = 24;   // Max 2 minutes of polling
 
 export default function UploadPage() {
     const router = useRouter();
@@ -54,6 +57,9 @@ export default function UploadPage() {
     const [article, setArticle] = useState<ArticleData | null>(null);
     const [errorMsg, setErrorMsg] = useState('');
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedArticle, setEditedArticle] = useState<Partial<ArticleData>>({});
+    const [isSaving, setIsSaving] = useState(false);
 
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingAttemptsRef = useRef(0);
@@ -84,7 +90,7 @@ export default function UploadPage() {
     /**
      * Poll the Backend every 5s to check if the AI service has finished
      * updating title / abstract / content.
-     *
+     * 
      * We consider extraction done when `title` no longer contains "Pending"
      * and `content` is non-empty.
      */
@@ -152,6 +158,36 @@ export default function UploadPage() {
         setArticle(null);
         setErrorMsg('');
         setStatusMsg('');
+        setIsEditing(false);
+    };
+
+    const handleEditClick = () => {
+        if (!article) return;
+        setEditedArticle({
+            title: article.title,
+            abstract: article.abstract,
+            content: article.content,
+        });
+        setIsEditing(true);
+    };
+
+    const handleCancelEdit = () => {
+        setIsEditing(false);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!article) return;
+        setIsSaving(true);
+        try {
+            const updated = await api.patch(`/articles/${article.slug}/`, editedArticle);
+            setArticle(updated);
+            setIsEditing(false);
+        } catch (error) {
+            console.error(error);
+            alert('Failed to save changes. Please try again.');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const processUpload = async () => {
@@ -206,39 +242,19 @@ export default function UploadPage() {
                     body: JSON.stringify({
                         pdf_url: public_url,
                         slug: articleData.slug,
-                        article_id: articleData.id,
+                        article_id: articleData.id ?? 1,
                     }),
                 }
             );
 
             if (!aiRes.ok) {
-                const errorData = await aiRes.json().catch(() => ({}));
-                console.warn('AI Service trigger failed:', errorData.error || aiRes.statusText);
-                // Even if trigger fails, we try polling once just in case it started anyway
-                startPolling(articleData.slug);
-                return;
+                console.warn('AI Service trigger failed — check if AI Service is running on port 8001.');
             }
 
-            const result = await aiRes.json();
-            setProgress(90);
+            setProgress(75);
 
-            // ── 5. Check if result is synchronous or needs polling ───────
-            if (result.status === 'completed' && result.data) {
-                // Synchronous success! No need to poll.
-                const extracted = result.data;
-                setArticle({
-                    ...articleData,
-                    title: extracted.title,
-                    abstract: extracted.abstract,
-                    content: extracted.content
-                });
-                setProgress(100);
-                setStep('done');
-                setStatusMsg('Extraction complete!');
-            } else {
-                // Background task started, start polling
-                startPolling(articleData.slug);
-            }
+            // ── 5. Poll the Backend until extracted data is available ───────
+            startPolling(articleData.slug);
 
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'Unknown error occurred.';
@@ -478,10 +494,19 @@ export default function UploadPage() {
                                     <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
                                         <FileText size={14} /> Title
                                     </label>
-                                    {step === 'done' && article?.title && !article.title.startsWith('Pending') ? (
-                                        <p className="text-xl font-bold leading-snug">{article.title}</p>
+                                    {isEditing ? (
+                                        <input
+                                            type="text"
+                                            value={editedArticle.title || ''}
+                                            onChange={(e) => setEditedArticle({ ...editedArticle, title: e.target.value })}
+                                            className="w-full text-xl font-bold leading-snug p-3 border border-[#2513ec]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2513ec]/50"
+                                        />
                                     ) : (
-                                        <div className="h-7 w-3/4 bg-slate-100 rounded animate-pulse" />
+                                        step === 'done' && article?.title && !article.title.startsWith('Pending') ? (
+                                            <p className="text-xl font-bold leading-snug">{article.title}</p>
+                                        ) : (
+                                            <div className="h-7 w-3/4 bg-slate-100 rounded animate-pulse" />
+                                        )
                                     )}
                                 </div>
 
@@ -490,38 +515,56 @@ export default function UploadPage() {
                                     <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
                                         <AlignLeft size={14} /> Abstract
                                     </label>
-                                    {step === 'done' && article?.abstract ? (
-                                        <p className="text-slate-700 leading-relaxed text-sm">{article.abstract}</p>
+                                    {isEditing ? (
+                                        <textarea
+                                            value={editedArticle.abstract || ''}
+                                            onChange={(e) => setEditedArticle({ ...editedArticle, abstract: e.target.value })}
+                                            rows={4}
+                                            className="w-full text-sm text-slate-700 leading-relaxed p-3 border border-[#2513ec]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2513ec]/50 resize-y"
+                                        />
                                     ) : (
-                                        <div className="space-y-2">
-                                            <div className="h-4 w-full bg-slate-100 rounded animate-pulse" />
-                                            <div className="h-4 w-5/6 bg-slate-100 rounded animate-pulse" />
-                                            <div className="h-4 w-4/6 bg-slate-100 rounded animate-pulse" />
-                                        </div>
+                                        step === 'done' && article?.abstract ? (
+                                            <p className="text-slate-700 leading-relaxed text-sm">{article.abstract}</p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <div className="h-4 w-full bg-slate-100 rounded animate-pulse" />
+                                                <div className="h-4 w-5/6 bg-slate-100 rounded animate-pulse" />
+                                                <div className="h-4 w-4/6 bg-slate-100 rounded animate-pulse" />
+                                            </div>
+                                        )
                                     )}
                                 </div>
 
                                 {/* Content preview */}
                                 <div className={step !== 'done' ? 'opacity-40 transition-opacity' : 'transition-opacity'}>
                                     <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                                        <BookOpen size={14} /> Content Preview
+                                        <BookOpen size={14} /> Content {isEditing ? '' : 'Preview'}
                                     </label>
-                                    {step === 'done' && article?.content ? (
-                                        <div className="relative">
-                                            <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap line-clamp-6">
-                                                {article.content.slice(0, 600)}
-                                            </p>
-                                            <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white to-transparent pointer-events-none" />
-                                            <p className="text-xs text-slate-400 mt-3">
-                                                {(article.content.length / 1000).toFixed(1)}k characters extracted
-                                            </p>
-                                        </div>
+                                    {isEditing ? (
+                                        <textarea
+                                            value={editedArticle.content || ''}
+                                            onChange={(e) => setEditedArticle({ ...editedArticle, content: e.target.value })}
+                                            rows={12}
+                                            className="w-full text-sm text-slate-600 leading-relaxed p-3 border border-[#2513ec]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2513ec]/50 resize-y font-mono"
+                                        />
                                     ) : (
-                                        <div className="space-y-2">
-                                            <div className="h-4 w-full bg-slate-100 rounded animate-pulse" />
-                                            <div className="h-4 w-full bg-slate-100 rounded animate-pulse" />
-                                            <div className="h-4 w-2/3 bg-slate-100 rounded animate-pulse" />
-                                        </div>
+                                        step === 'done' && article?.content ? (
+                                            <div className="relative">
+                                                <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap line-clamp-6">
+                                                    {article.content.slice(0, 600)}
+                                                </p>
+                                                <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+                                                <p className="text-xs text-slate-400 mt-3">
+                                                    {(article.content.length / 1000).toFixed(1)}k characters extracted
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <div className="h-4 w-full bg-slate-100 rounded animate-pulse" />
+                                                <div className="h-4 w-full bg-slate-100 rounded animate-pulse" />
+                                                <div className="h-4 w-2/3 bg-slate-100 rounded animate-pulse" />
+                                            </div>
+                                        )
                                     )}
                                 </div>
 
@@ -545,19 +588,54 @@ export default function UploadPage() {
 
                             {/* Footer actions (done state) */}
                             {step === 'done' && (
-                                <div className="px-8 pb-8 flex items-center gap-4">
-                                    <button
-                                        onClick={resetUpload}
-                                        className="px-6 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
-                                    >
-                                        Upload Another
-                                    </button>
-                                    <button
-                                        onClick={() => router.push('/')}
-                                        className="px-6 py-2.5 bg-[#2513ec] text-white rounded-xl font-bold text-sm hover:bg-[#2513ec]/90 transition-colors"
-                                    >
-                                        Go to Dashboard →
-                                    </button>
+                                <div className="px-8 pb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        {!isEditing ? (
+                                            <button
+                                                onClick={handleEditClick}
+                                                className="px-5 py-2.5 bg-indigo-50 text-[#2513ec] rounded-xl font-bold text-sm hover:bg-indigo-100 transition-colors flex items-center gap-2"
+                                            >
+                                                <Edit3 size={16} />
+                                                Edit Extraction
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <button
+                                                    onClick={handleSaveEdit}
+                                                    disabled={isSaving}
+                                                    className="px-5 py-2.5 bg-[#2513ec] text-white rounded-xl font-bold text-sm hover:bg-[#2513ec]/90 transition-colors flex items-center gap-2 disabled:opacity-75"
+                                                >
+                                                    {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                                                    {isSaving ? 'Saving...' : 'Save Changes'}
+                                                </button>
+                                                <button
+                                                    onClick={handleCancelEdit}
+                                                    disabled={isSaving}
+                                                    className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors flex items-center gap-2 disabled:opacity-75"
+                                                >
+                                                    <X size={16} />
+                                                    Cancel
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                    
+                                    {!isEditing && (
+                                        <div className="flex items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0 pt-4 sm:pt-0 border-t sm:border-0 border-slate-100">
+                                            <button
+                                                onClick={resetUpload}
+                                                className="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
+                                            >
+                                                Upload Another
+                                            </button>
+                                            <button
+                                                onClick={() => router.push('/')}
+                                                className="px-5 py-2.5 bg-[#2513ec] text-white rounded-xl font-bold text-sm hover:bg-[#2513ec]/90 transition-colors"
+                                            >
+                                                Go to Dashboard →
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </section>

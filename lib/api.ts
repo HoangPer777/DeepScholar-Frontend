@@ -45,6 +45,13 @@ export const api = {
       body: JSON.stringify(data)
     }).then(res => res.json()),
     
+  patch: (endpoint: string, data: any, options?: RequestInit) => 
+    fetchWithAuth(endpoint, { 
+      ...options, 
+      method: 'PATCH', 
+      body: JSON.stringify(data)
+    }).then(res => res.json()),
+    
   delete: (endpoint: string, options?: RequestInit) => 
     fetchWithAuth(endpoint, { ...options, method: 'DELETE' }).then(res => res.json()),
 };
