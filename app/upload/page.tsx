@@ -12,10 +12,6 @@ import {
     List,
     Settings,
     UserRound,
-    FileUp,
-    UploadCloud,
-    Loader2,
-    CheckCircle2,
     AlertCircle,
     FileText,
     AlignLeft,
@@ -23,14 +19,24 @@ import {
     Edit3,
     Save,
     X,
+    Bookmark,
+    Sparkles,
+    ChartNoAxesColumn,
+    FileUp,
+    UploadCloud,
+    Loader2,
+    CheckCircle2,
+    Search,
+    Users,
 } from 'lucide-react';
 
 const navItems = [
-    { label: 'Dashboard', active: false, icon: List },
-    { label: 'Upload Paper', active: true, icon: FileUp, highlight: true },
-    { label: 'Library', active: false, icon: Library },
-    { label: 'AI Agents', active: false, icon: Bot },
-    { label: 'Settings', active: false, icon: Settings },
+  { label: 'Feed', active: false, icon: List },
+  { label: 'AI Deep Research', active: false, icon: Sparkles, highlight: true },
+  { label: 'Library', active: false, icon: Library },
+  { label: 'Rankings', active: false, icon: ChartNoAxesColumn },
+  { label: 'Bookmarks', active: false, icon: Bookmark },
+  { label: 'Collaborations', active: false, icon: UserRound },
 ];
 
 type UploadStep = 'idle' | 'uploading' | 'processing' | 'polling' | 'done' | 'error';
@@ -42,6 +48,7 @@ interface ArticleData {
     abstract?: string;
     content?: string;
     pdf_url?: string;
+    authors?: any[];
 }
 
 const POLLING_INTERVAL_MS = 5000;  // Poll every 5 seconds
@@ -60,6 +67,12 @@ export default function UploadPage() {
     const [isEditing, setIsEditing] = useState(false);
     const [editedArticle, setEditedArticle] = useState<Partial<ArticleData>>({});
     const [isSaving, setIsSaving] = useState(false);
+
+    // Co-authors
+    const [coAuthors, setCoAuthors] = useState<any[]>([]);
+    const [authorSearchQuery, setAuthorSearchQuery] = useState('');
+    const [authorSearchResults, setAuthorSearchResults] = useState<any[]>([]);
+    const [isSearchingAuthors, setIsSearchingAuthors] = useState(false);
 
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingAttemptsRef = useRef(0);
@@ -150,6 +163,25 @@ export default function UploadPage() {
         }
     };
 
+    useEffect(() => {
+        if (!authorSearchQuery.trim()) {
+            setAuthorSearchResults([]);
+            return;
+        }
+        const delayDebounceFn = setTimeout(async () => {
+            setIsSearchingAuthors(true);
+            try {
+                const res = await api.get(`/authors/ranking/?search=${encodeURIComponent(authorSearchQuery)}`);
+                setAuthorSearchResults(res.results || []);
+            } catch (e) {
+                console.error('Failed to search authors:', e);
+            } finally {
+                setIsSearchingAuthors(false);
+            }
+        }, 300);
+        return () => clearTimeout(delayDebounceFn);
+    }, [authorSearchQuery]);
+
     const resetUpload = () => {
         stopPolling();
         setFile(null);
@@ -159,6 +191,9 @@ export default function UploadPage() {
         setErrorMsg('');
         setStatusMsg('');
         setIsEditing(false);
+        setCoAuthors([]);
+        setAuthorSearchQuery('');
+        setAuthorSearchResults([]);
     };
 
     const handleEditClick = () => {
@@ -168,6 +203,7 @@ export default function UploadPage() {
             abstract: article.abstract,
             content: article.content,
         });
+        setCoAuthors(article.authors ? article.authors.slice(1) : []);
         setIsEditing(true);
     };
 
@@ -179,7 +215,11 @@ export default function UploadPage() {
         if (!article) return;
         setIsSaving(true);
         try {
-            const updated = await api.patch(`/articles/${article.slug}/`, editedArticle);
+            const payload = {
+                ...editedArticle,
+                co_authors: coAuthors.map(a => a.id)
+            };
+            const updated = await api.patch(`/articles/${article.slug}/`, payload);
             setArticle(updated);
             setIsEditing(false);
         } catch (error) {
@@ -290,11 +330,11 @@ export default function UploadPage() {
         <main className="min-h-screen bg-[#f6f6f8] text-slate-900 flex overflow-hidden">
             {/* ── Sidebar ──────────────────────────────────────────────── */}
             <aside
-                className={`sticky top-0 h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-72'}`}
+                className={`sticky top-0 z-20 h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}
             >
                 <button
                     type="button"
-                    onClick={() => setSidebarCollapsed(prev => !prev)}
+                    onClick={() => setSidebarCollapsed((prev) => !prev)}
                     className="absolute -right-3 top-6 z-20 rounded-full border border-slate-200 bg-white p-1.5 text-slate-600 shadow-sm hover:bg-slate-50"
                     aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 >
@@ -303,48 +343,84 @@ export default function UploadPage() {
 
                 <div className="p-6">
                     <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-                        <div className="rounded-xl bg-[#2513ec] p-2 text-white flex items-center justify-center">
+                        <div className="rounded-lg bg-[#135bec] p-2 text-white">
                             <Atom size={20} />
                         </div>
                         {!sidebarCollapsed && (
                             <div>
-                                <h1 className="text-lg font-bold leading-none tracking-tight">Scholar AI</h1>
-                                <p className="text-xs font-medium text-slate-500">Research Intelligence</p>
+                                <h1 className="text-lg font-bold leading-none">Deep Scholar</h1>
+                                <p className="text-xs font-medium text-slate-500">Research Portal</p>
                             </div>
                         )}
                     </div>
                 </div>
 
-                <nav className="flex-1 space-y-2 px-4 py-6">
-                    {navItems.map(item => {
+                <nav className="flex-1 space-y-2 px-4 overflow-y-auto">
+                    {navItems.slice(0, 4).map((item) => {
+                        const Icon = item.icon;
+                        if (item.highlight) {
+                            return (
+                                <button
+                                    key={item.label}
+                                    type="button"
+                                    className={`flex w-full rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-left text-indigo-700 shadow-[0_0_15px_rgba(19,91,236,0.2)] ${sidebarCollapsed ? 'items-center justify-center' : 'items-center justify-between'}`}
+                                    title={sidebarCollapsed ? item.label : undefined}
+                                >
+                                    <span className={`flex items-center ${sidebarCollapsed ? '' : 'gap-3'}`}>
+                                        <Icon size={18} />
+                                        {!sidebarCollapsed && <span className="text-sm font-bold">{item.label}</span>}
+                                    </span>
+                                    {!sidebarCollapsed && (
+                                        <span className="rounded bg-[#135bec] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">AI</span>
+                                    )}
+                                </button>
+                            );
+                        }
+
+                        return (
+                            <button
+                                key={item.label}
+                                type="button"
+                                onClick={() => { if (item.label === 'Feed') router.push('/'); }}
+                                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors ${item.active ? 'bg-blue-50 text-[#135bec]' : 'text-slate-600 hover:bg-slate-50'}`}
+                                title={sidebarCollapsed ? item.label : undefined}
+                            >
+                                <Icon size={18} />
+                                {!sidebarCollapsed && item.label}
+                            </button>
+                        );
+                    })}
+
+                    {!sidebarCollapsed && (
+                        <div className="pt-4 pb-2 px-3">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Workspace</p>
+                        </div>
+                    )}
+
+                    {navItems.slice(4).map((item) => {
                         const Icon = item.icon;
                         return (
                             <button
                                 key={item.label}
                                 type="button"
-                                onClick={() => { if (item.label === 'Dashboard') router.push('/'); }}
-                                className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left text-sm font-medium transition-colors ${item.active ? 'bg-[#2513ec]/10 text-[#2513ec]' : 'text-slate-600 hover:bg-slate-100'} ${sidebarCollapsed ? 'justify-center' : ''}`}
+                                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
                                 title={sidebarCollapsed ? item.label : undefined}
                             >
-                                <Icon size={20} />
+                                <Icon size={18} />
                                 {!sidebarCollapsed && item.label}
                             </button>
                         );
                     })}
                 </nav>
 
-                <div className="border-t border-slate-200 p-6">
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center">
-                            <UserRound className="text-slate-500" size={18} />
-                        </div>
-                        {!sidebarCollapsed && (
-                            <div>
-                                <p className="text-sm font-bold">DeepScholar User</p>
-                                <p className="text-xs text-slate-500">Premium Plan</p>
-                            </div>
-                        )}
-                    </div>
+                <div className="border-t border-slate-200 p-4">
+                    <button
+                        className={`flex w-full items-center justify-center rounded-lg bg-[#135bec] py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 ${sidebarCollapsed ? 'gap-0 px-0' : 'gap-2'}`}
+                        title={sidebarCollapsed ? 'AI Assistant' : undefined}
+                    >
+                        <Bot size={18} />
+                        {!sidebarCollapsed && 'AI Assistant'}
+                    </button>
                 </div>
             </aside>
 
@@ -536,6 +612,70 @@ export default function UploadPage() {
                                 </div>
 
                                 {/* Content preview */}
+                                <div className={step !== 'done' ? 'opacity-40 transition-opacity' : 'transition-opacity'}>
+                                    <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+                                        <Users size={14} /> Co-Authors
+                                    </label>
+                                    <div className="flex flex-wrap gap-2 mb-2">
+                                        {(isEditing ? coAuthors : article?.authors?.slice(1) || []).map((author: any) => (
+                                            <span key={author.id} className="flex items-center gap-1 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold border border-indigo-100">
+                                                {author.user?.full_name || author.full_name || author.author_code || 'Author'}
+                                                {isEditing && (
+                                                    <button onClick={() => setCoAuthors(prev => prev.filter(a => a.id !== author.id))} className="hover:text-red-500 ml-1 hover:bg-red-50 rounded-full p-0.5 transition-colors">
+                                                        <X size={13} />
+                                                    </button>
+                                                )}
+                                            </span>
+                                        ))}
+                                        {!isEditing && article?.authors && article.authors.length <= 1 && (
+                                            <span className="text-sm text-slate-400 italic">No co-authors added.</span>
+                                        )}
+                                    </div>
+                                    {isEditing && (
+                                        <div className="relative">
+                                            <div className="relative">
+                                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search to add co-authors..."
+                                                    value={authorSearchQuery}
+                                                    onChange={(e) => setAuthorSearchQuery(e.target.value)}
+                                                    className="w-full pl-9 p-3 border border-[#2513ec]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2513ec]/50 text-sm"
+                                                />
+                                            </div>
+                                            {authorSearchQuery && (
+                                                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                                    {isSearchingAuthors ? (
+                                                        <div className="p-3 text-sm text-slate-500 text-center">Searching...</div>
+                                                    ) : authorSearchResults.length > 0 ? (
+                                                        authorSearchResults.map((author: any) => (
+                                                            <div
+                                                                key={author.id}
+                                                                onClick={() => {
+                                                                    if (!coAuthors.find(a => a.id === author.id)) {
+                                                                        setCoAuthors([...coAuthors, author]);
+                                                                    }
+                                                                    setAuthorSearchQuery('');
+                                                                    setAuthorSearchResults([]);
+                                                                }}
+                                                                className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 flex items-center justify-between"
+                                                            >
+                                                                <div>
+                                                                    <div className="font-bold text-sm text-slate-800">{author.user?.full_name || author.full_name || 'Unknown User'}</div>
+                                                                    <div className="text-xs text-slate-500">ID Code: {author.author_code}</div>
+                                                                </div>
+                                                                <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-md hover:bg-indigo-100 transition-colors">Select</span>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="p-3 text-sm text-slate-500 text-center">No authors found (try another name)</div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className={step !== 'done' ? 'opacity-40 transition-opacity' : 'transition-opacity'}>
                                     <label className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
                                         <BookOpen size={14} /> Content {isEditing ? '' : 'Preview'}

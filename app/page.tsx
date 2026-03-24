@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { api } from '@/lib/api';
 import {
   Atom,
   BadgeCheck,
@@ -12,12 +13,15 @@ import {
   ChartNoAxesColumn,
   ChevronLeft,
   ChevronRight,
+  Eye,
   FileUp,
   Filter,
+  Heart,
   Library,
   List,
   MessageSquare,
   Search,
+  Share2,
   Sparkles,
   Star,
   Trophy,
@@ -33,63 +37,6 @@ const navItems = [
   { label: 'Collaborations', active: false, icon: UserRound },
 ];
 
-const papers = [
-  {
-    source: 'Nature ML',
-    title: 'Neural Radiance Fields in Medical Imaging: A Systematic Review',
-    authors: 'Dr. Elena Smith, Prof. Julian Voss, Sarah Chen, PhD',
-    abstract:
-      'This review explores the transformative potential of Neural Radiance Fields (NeRF) in medical imaging. We analyze 50+ recent publications to identify how coordinate-based neural representations improve 3D reconstruction, cross-modality synthesis, and surgical visualization while overcoming voxel-based limitations.',
-    tags: ['Computer Vision', 'Diagnostics', 'High Impact'],
-    published: 'Published 2 days ago',
-  },
-  {
-    source: 'ArXiv',
-    title: 'Scalable Quantum Error Correction with Multi-Agent Reinforcement Learning',
-    authors: 'Prof. Marcus Thorne, Dr. Leo Zhang',
-    abstract:
-      'We present a novel approach to stabilizer code error correction using a distributed multi-agent RL framework. By modeling each qubit as an autonomous agent, our system achieves near-threshold performance with lower overhead than centralized decoders.',
-    tags: ['Quantum Computing', 'RL Agents', 'Methodology Shift'],
-    published: 'Published 5 days ago',
-  },
-  {
-    source: 'Nature ML',
-    title: 'Neural Radiance Fields in Medical Imaging: A Systematic Review',
-    authors: 'Dr. Elena Smith, Prof. Julian Voss, Sarah Chen, PhD',
-    abstract:
-      'This review explores the transformative potential of Neural Radiance Fields (NeRF) in medical imaging. We analyze 50+ recent publications to identify how coordinate-based neural representations improve 3D reconstruction, cross-modality synthesis, and surgical visualization while overcoming voxel-based limitations.',
-    tags: ['Computer Vision', 'Diagnostics', 'High Impact'],
-    published: 'Published 2 days ago',
-  },
-  {
-    source: 'Nature ML',
-    title: 'Neural Radiance Fields in Medical Imaging: A Systematic Review',
-    authors: 'Dr. Elena Smith, Prof. Julian Voss, Sarah Chen, PhD',
-    abstract:
-      'This review explores the transformative potential of Neural Radiance Fields (NeRF) in medical imaging. We analyze 50+ recent publications to identify how coordinate-based neural representations improve 3D reconstruction, cross-modality synthesis, and surgical visualization while overcoming voxel-based limitations.',
-    tags: ['Computer Vision', 'Diagnostics', 'High Impact'],
-    published: 'Published 2 days ago',
-  },
-  {
-    source: 'ArXiv',
-    title: 'Scalable Quantum Error Correction with Multi-Agent Reinforcement Learning',
-    authors: 'Prof. Marcus Thorne, Dr. Leo Zhang',
-    abstract:
-      'We present a novel approach to stabilizer code error correction using a distributed multi-agent RL framework. By modeling each qubit as an autonomous agent, our system achieves near-threshold performance with lower overhead than centralized decoders.',
-    tags: ['Quantum Computing', 'RL Agents', 'Methodology Shift'],
-    published: 'Published 5 days ago',
-  },
-  {
-    source: 'Nature ML',
-    title: 'Neural Radiance Fields in Medical Imaging: A Systematic Review',
-    authors: 'Dr. Elena Smith, Prof. Julian Voss, Sarah Chen, PhD',
-    abstract:
-      'This review explores the transformative potential of Neural Radiance Fields (NeRF) in medical imaging. We analyze 50+ recent publications to identify how coordinate-based neural representations improve 3D reconstruction, cross-modality synthesis, and surgical visualization while overcoming voxel-based limitations.',
-    tags: ['Computer Vision', 'Diagnostics', 'High Impact'],
-    published: 'Published 2 days ago',
-  },
-];
-
 const researchers = [
   { rank: 1, name: 'Dr. Julian Voss', institution: 'Stanford University', impact: '2.4k' },
   { rank: 2, name: 'Sarah Chen, PhD', institution: 'MIT Media Lab', impact: '2.1k' },
@@ -98,12 +45,38 @@ const researchers = [
 
 export default function HomePage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [papers, setPapers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchArticles() {
+      try {
+        const data = await api.get('/articles/');
+        if (data.results) {
+            setPapers(data.results);
+        } else if (Array.isArray(data)) {
+            setPapers(data);
+        } else {
+            console.error("Unknown data format:", data);
+            setErrorMsg("Unknown API response format.");
+            setPapers([]);
+        }
+      } catch (error: any) {
+        console.error("Failed to fetch articles:", error);
+        setErrorMsg(error.message || String(error));
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchArticles();
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#f6f6f8] text-slate-900">
       <div className="mx-auto flex w-full max-w-[1700px]">
         <aside
-          className={`sticky top-0 hidden h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 lg:flex lg:flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'
+          className={`sticky top-0 z-20 hidden h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 lg:flex lg:flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'
             }`}
         >
           <button
@@ -216,10 +189,10 @@ export default function HomePage() {
                 <Bell size={17} />
               </button>
 
-              <Link href="/upload" className="flex h-10 items-center gap-2 rounded-[10px] bg-[#1f5fe4] px-4 text-sm font-bold text-white transition hover:bg-[#1a53c8]">
+              <a href="/upload" className="flex h-10 items-center gap-2 rounded-[10px] bg-[#1f5fe4] px-4 text-sm font-bold text-white transition hover:bg-[#1a53c8]">
                 <FileUp size={16} />
                 Upload Paper
-              </Link>
+              </a>
 
               <button className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ecd6c3] text-sm font-bold text-white">
                 T
@@ -265,9 +238,15 @@ export default function HomePage() {
               </div>
 
               <div className="space-y-4">
-                {papers.map((paper) => (
+                {loading ? (
+                  <div className="flex justify-center p-8"><span className="text-slate-400">Loading articles...</span></div>
+                ) : errorMsg ? (
+                  <div className="flex justify-center p-8"><span className="text-red-500 font-bold">{errorMsg}</span></div>
+                ) : papers.length === 0 ? (
+                  <div className="flex justify-center p-8"><span className="text-slate-400">No articles available.</span></div>
+                ) : papers.map((paper) => (
                   <article
-                    key={paper.title}
+                    key={paper.id || paper.slug}
                     className="overflow-hidden rounded-xl border border-slate-200 bg-white transition-all hover:shadow-xl hover:shadow-blue-500/5"
                   >
                     <div className="p-6">
@@ -275,12 +254,16 @@ export default function HomePage() {
                         <div>
                           <div className="mb-2 flex items-center gap-3">
                             <span className="rounded border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#135bec]">
-                              {paper.source}
+                              {paper.source || 'DeepScholar'}
                             </span>
-                            <span className="text-[11px] font-medium text-slate-400">{paper.published}</span>
+                            <span className="text-[11px] font-medium text-slate-400">Published {new Date(paper.created_at).toLocaleDateString()}</span>
                           </div>
                           <h3 className="text-xl font-bold leading-tight text-slate-900">{paper.title}</h3>
-                          <p className="mt-1.5 text-sm font-medium text-blue-700/80">{paper.authors}</p>
+                          <p className="mt-1.5 text-sm font-medium text-blue-700/80">
+                            {paper.authors && paper.authors.length > 0 
+                              ? paper.authors.map((a: any) => a.author_code || a.full_name).join(', ') 
+                              : 'Unknown Author'}
+                          </p>
                         </div>
                         <Bookmark size={20} className="cursor-pointer text-slate-300 hover:text-[#135bec]" />
                       </div>
@@ -290,12 +273,18 @@ export default function HomePage() {
                         <p className="line-clamp-3 text-sm leading-relaxed text-slate-600">{paper.abstract}</p>
                       </div>
 
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        <span className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600">{paper.tags[0]}</span>
-                        <span className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600">{paper.tags[1]}</span>
-                        <span className="flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-xs font-bold text-indigo-600">
-                          <Star size={13} />
-                          {paper.tags[2]}
+                      <div className="mt-4 flex flex-wrap gap-4 text-slate-500">
+                        <span className="flex items-center gap-1.5 text-xs font-medium">
+                          <Eye size={14} className="text-slate-400" /> 
+                          {paper.view_count || 0} Lượt xem
+                        </span>
+                        <span className="flex items-center gap-1.5 text-xs font-medium">
+                          <Heart size={14} className="text-slate-400" /> 
+                          {paper.like_count || 0} Thích
+                        </span>
+                        <span className="flex items-center gap-1.5 text-xs font-medium">
+                          <Share2 size={14} className="text-slate-400" /> 
+                          {paper.share_count || 0} Chia sẻ
                         </span>
                       </div>
                     </div>

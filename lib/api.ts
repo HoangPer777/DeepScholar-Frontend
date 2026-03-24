@@ -2,9 +2,9 @@ const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000/a
 
 export const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
   const url = `${BASE_URL}${endpoint}`;
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(options.headers as Record<string, string>),
   };
 
   if (typeof window !== 'undefined') {
@@ -21,6 +21,16 @@ export const fetchWithAuth = async (endpoint: string, options: RequestInit = {})
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    
+    // Automatically clear expired tokens to allow anonymous read fallback or clean login state
+    if (response.status === 401 && (errorData.code === 'token_not_valid' || errorData.detail?.includes('Given token not valid'))) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        window.location.reload();
+      }
+    }
+    
     throw new Error(errorData.detail || 'API request failed');
   }
 
