@@ -9,6 +9,10 @@ services:
       # OAuth credentials - set these in .env on host machine
       - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
       - NEXT_PUBLIC_FACEBOOK_APP_ID=${NEXT_PUBLIC_FACEBOOK_APP_ID}
+      # Improve file change detection on Docker Desktop bind mounts (Windows/Mac)
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=300
     volumes:
       - .:/app
       - deepscholar_node_modules:/app/node_modules
