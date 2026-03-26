@@ -271,25 +271,18 @@ export default function UploadPage() {
             // directly. This avoids Docker network issues where localhost in the
             // browser may not resolve to the AI service container.
             const token = localStorage.getItem('access_token');
-            const aiRes = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/ai/trigger/`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        pdf_url: public_url,
-                        slug: articleData.slug,
-                        article_id: articleData.id ?? 1,
-                    }),
-                }
-            );
-
-            if (!aiRes.ok) {
-                console.warn('AI Service trigger failed — check if AI Service is running on port 8001.');
+            if (!token) {
+                throw new Error('Your login session has expired. Please login again and retry upload.');
             }
+            await api.post('/ai/trigger/', {
+                pdf_url: public_url,
+                slug: articleData.slug,
+                article_id: articleData.id ?? 1,
+            }, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                },
+            });
 
             setProgress(75);
 
@@ -647,28 +640,48 @@ export default function UploadPage() {
                                                 <div className="absolute z-10 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                                                     {isSearchingAuthors ? (
                                                         <div className="p-3 text-sm text-slate-500 text-center">Searching...</div>
-                                                    ) : authorSearchResults.length > 0 ? (
-                                                        authorSearchResults.map((author: any) => (
+                                                    ) : (
+                                                        <>
+                                                            {authorSearchResults.length > 0 ? (
+                                                                authorSearchResults.map((author: any) => (
+                                                                    <div
+                                                                        key={author.id}
+                                                                        onClick={() => {
+                                                                            if (!coAuthors.find(a => a.id === author.id)) {
+                                                                                setCoAuthors([...coAuthors, author]);
+                                                                            }
+                                                                            setAuthorSearchQuery('');
+                                                                            setAuthorSearchResults([]);
+                                                                        }}
+                                                                        className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 flex items-center justify-between"
+                                                                    >
+                                                                        <div>
+                                                                            <div className="font-bold text-sm text-slate-800">{author.user?.full_name || author.full_name || 'Unknown User'}</div>
+                                                                            <div className="text-xs text-slate-500">ID Code: {author.author_code}</div>
+                                                                        </div>
+                                                                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-md hover:bg-indigo-100 transition-colors">Select</span>
+                                                                    </div>
+                                                                ))
+                                                            ) : (
+                                                                <div className="p-3 text-sm text-slate-500 text-center">No existing authors found</div>
+                                                            )}
                                                             <div
-                                                                key={author.id}
                                                                 onClick={() => {
-                                                                    if (!coAuthors.find(a => a.id === author.id)) {
-                                                                        setCoAuthors([...coAuthors, author]);
+                                                                    if (authorSearchQuery.trim() && !coAuthors.find(a => a.id === authorSearchQuery.trim())) {
+                                                                        setCoAuthors([...coAuthors, { id: authorSearchQuery.trim(), full_name: authorSearchQuery.trim(), author_code: 'Unregistered' }]);
                                                                     }
                                                                     setAuthorSearchQuery('');
                                                                     setAuthorSearchResults([]);
                                                                 }}
-                                                                className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0 flex items-center justify-between"
+                                                                className="p-3 hover:bg-indigo-50 cursor-pointer border-t border-slate-100 flex items-center justify-between"
                                                             >
                                                                 <div>
-                                                                    <div className="font-bold text-sm text-slate-800">{author.user?.full_name || author.full_name || 'Unknown User'}</div>
-                                                                    <div className="text-xs text-slate-500">ID Code: {author.author_code}</div>
+                                                                    <div className="font-bold text-sm text-slate-800">Add "{authorSearchQuery}"</div>
+                                                                    <div className="text-xs text-slate-500">as an unregistered co-author</div>
                                                                 </div>
-                                                                <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-md hover:bg-indigo-100 transition-colors">Select</span>
+                                                                <span className="text-xs font-bold text-indigo-700 bg-indigo-100 px-3 py-1.5 rounded-md transition-colors">+ Add</span>
                                                             </div>
-                                                        ))
-                                                    ) : (
-                                                        <div className="p-3 text-sm text-slate-500 text-center">No authors found (try another name)</div>
+                                                        </>
                                                     )}
                                                 </div>
                                             )}

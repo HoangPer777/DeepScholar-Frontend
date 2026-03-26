@@ -261,7 +261,7 @@ export default function HomePage() {
                           <h3 className="text-xl font-bold leading-tight text-slate-900">{paper.title}</h3>
                           <p className="mt-1.5 text-sm font-medium text-blue-700/80">
                             {paper.authors && paper.authors.length > 0 
-                              ? paper.authors.map((a: any) => a.author_code || a.full_name).join(', ') 
+                              ? paper.authors.map((a: any) => a.full_name || a.author_code).join(', ') 
                               : 'Unknown Author'}
                           </p>
                         </div>
