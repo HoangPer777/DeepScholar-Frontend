@@ -299,7 +299,12 @@ export default function HomePage() {
                         <MessageSquare size={15} />
                         Agent Q&A
                       </button>
-                      <button className="ml-auto text-xs font-bold text-slate-500 hover:text-slate-800">Read Full Paper</button>
+                      <Link
+                        href={`/papers/${paper.slug}` as Route}
+                        className="ml-auto text-xs font-bold text-slate-500 hover:text-slate-800"
+                      >
+                        Read Full Paper
+                      </Link>
                     </div>
                   </article>
                 ))}
