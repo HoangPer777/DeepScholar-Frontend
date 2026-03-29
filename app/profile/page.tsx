@@ -340,6 +340,9 @@ export default function ProfilePage() {
                               {paper.share_count || 0}
                             </span>
                             <span className="font-semibold text-slate-400">Published {new Date(paper.created_at).toLocaleDateString()}</span>
+                            <Link href={`/papers/${paper.slug}` as Route} className="font-bold text-[#135bec] hover:underline">
+                              Read Full Paper
+                            </Link>
                           </div>
                         </article>
                       ))
