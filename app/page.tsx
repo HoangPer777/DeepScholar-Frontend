@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { api } from '@/lib/api';
 import {
   Atom,
@@ -194,9 +195,9 @@ export default function HomePage() {
                 Upload Paper
               </a>
 
-              <button className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ecd6c3] text-sm font-bold text-white">
+              <Link href={'/profile' as Route} className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ecd6c3] text-sm font-bold text-white">
                 T
-              </button>
+              </Link>
             </div>
           </header>
 
