@@ -1,27 +1,27 @@
 'use client';
 
 import React from 'react';
-import { 
-  History, 
-  Search, 
-  Calendar, 
-  Cpu, 
-  FileText, 
-  CheckCircle2,
-  Clock,
+import {
+  History,
+  Calendar,
+  Cpu,
+  FileText,
   Sparkles,
-  ChevronRight,
-  Bell,
-  Settings,
-  UserRound,
-  SearchIcon
+  ExternalLink,
+  AlertCircle,
+  Loader2,
+  Zap,
+  Clock,
 } from 'lucide-react';
-import Link from 'next/link';
+import type { DeepResearchResponse, ResearchErrorType } from '@/services/research';
 
 interface ResearchResultsProps {
   query: string;
-  report?: string;
-  sources?: any[];
+  data?: DeepResearchResponse | null;
+  loading?: boolean;
+  error?: string | null;
+  errorType?: ResearchErrorType | null;
+  retryAfter?: number | null;
 }
 
 const historyItems = [
@@ -31,28 +31,118 @@ const historyItems = [
   { id: '4', title: 'LLM EFFICIENCY 2024', active: false },
 ];
 
-export default function ResearchResults({ query }: ResearchResultsProps) {
+function extractAbstract(text: string): string {
+  const lines = text.split('\n');
+  const paragraphs: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith('## ') && paragraphs.length > 0) break;
+    const clean = line.replace(/^##\s*Abstract\s*/i, '').trim();
+    if (clean) paragraphs.push(clean);
+  }
+  return paragraphs.join(' ').slice(0, 600);
+}
+
+/** Inline: bold **text**, citation [1], links */
+function renderInline(text: string, key: number): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g);
+  return (
+    <React.Fragment key={key}>
+      {parts.map((part, i) => {
+        if (/^\*\*[^*]+\*\*$/.test(part)) {
+          return <strong key={i} className="font-black text-slate-800">{part.slice(2, -2)}</strong>;
+        }
+        const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+        if (linkMatch) {
+          return <a key={i} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" className="text-[#135bec] hover:underline font-medium">{linkMatch[1]}</a>;
+        }
+        return part;
+      })}
+    </React.Fragment>
+  );
+}
+
+function MarkdownContent({ content }: { content: string }) {
+  const lines = content.split('\n');
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+  let skipAbstract = false;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Skip the ## Abstract section entirely (already shown in callout box)
+    if (line.match(/^##\s*Abstract\s*$/i)) {
+      skipAbstract = true;
+      i++;
+      continue;
+    }
+    if (skipAbstract) {
+      if (line.startsWith('## ')) {
+        skipAbstract = false; // next section starts, stop skipping
+      } else {
+        i++;
+        continue;
+      }
+    }
+
+    if (line.startsWith('## ')) {
+      elements.push(
+        <h2 key={i} className="text-2xl font-black text-slate-900 tracking-tight mt-12 mb-4 pb-2 border-b border-slate-100">
+          {line.slice(3)}
+        </h2>
+      );
+    } else if (line.startsWith('### ')) {
+      elements.push(
+        <h3 key={i} className="text-lg font-black text-slate-800 mt-8 mb-3">{line.slice(4)}</h3>
+      );
+    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      const items: string[] = [];
+      while (i < lines.length && (lines[i].startsWith('- ') || lines[i].startsWith('* '))) {
+        items.push(lines[i].slice(2));
+        i++;
+      }
+      elements.push(
+        <ul key={`ul-${i}`} className="space-y-2 mb-4 pl-2">
+          {items.map((item, j) => (
+            <li key={j} className="text-[14px] text-slate-600 leading-relaxed flex gap-2">
+              <span className="text-[#135bec] mt-1.5 shrink-0 text-xs">•</span>
+              <span>{renderInline(item, j)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    } else if (line.trim() !== '') {
+      elements.push(
+        <p key={i} className="text-[14px] text-slate-600 leading-relaxed mb-4">
+          {renderInline(line, i)}
+        </p>
+      );
+    }
+
+    i++;
+  }
+
+  return <>{elements}</>;
+}
+
+export default function ResearchResults({
+  query, data, loading, error, errorType, retryAfter,
+}: ResearchResultsProps) {
+  const abstract = data ? extractAbstract(data.answer) : '';
+
   return (
     <div className="flex min-h-[calc(100vh-60px)] bg-white border-t border-slate-100">
-      {/* Left Sidebar - Research History */}
+      {/* Left Sidebar */}
       <aside className="w-64 shrink-0 border-r border-slate-100 p-6 flex flex-col gap-8 bg-white overflow-y-auto">
         <div className="space-y-4">
-          <div className="text-[10px] font-black uppercase tracking-[0.15em] text-[#135bec]">
-            Research History
-          </div>
-          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-            Active Research Sessions
-          </div>
+          <div className="text-[10px] font-black uppercase tracking-[0.15em] text-[#135bec]">Research History</div>
+          <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Active Research Sessions</div>
           <nav className="space-y-3 pt-2">
             {historyItems.map((item) => (
-              <button
-                key={item.id}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-[10px] font-black transition-all ${
-                  item.active 
-                    ? 'bg-indigo-50/50 text-[#135bec] border border-[#135bec]/10 shadow-sm' 
-                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
-                }`}
-              >
+              <button key={item.id} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-[10px] font-black transition-all ${
+                item.active ? 'bg-indigo-50/50 text-[#135bec] border border-[#135bec]/10 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
+              }`}>
                 <History size={14} className={item.active ? 'text-[#135bec]' : 'text-slate-300'} />
                 <span className="truncate">{item.title}</span>
                 {item.active && <div className="ml-auto w-1 h-4 bg-[#135bec] rounded-full" />}
@@ -60,121 +150,116 @@ export default function ResearchResults({ query }: ResearchResultsProps) {
             ))}
           </nav>
         </div>
-        
+
+        {data?.sources && data.sources.length > 0 && (
+          <div className="space-y-3">
+            <div className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400">
+              Sources ({data.sources.length})
+            </div>
+            <div className="space-y-2">
+              {data.sources.map((s) => (
+                <a key={s.index} href={s.url || '#'} target="_blank" rel="noopener noreferrer"
+                  className="flex items-start gap-2 p-2 rounded-lg hover:bg-slate-50 transition-all group">
+                  <span className="text-[9px] font-black text-[#135bec] opacity-50 mt-0.5 shrink-0">[{s.index}]</span>
+                  <span className="text-[10px] font-medium text-slate-500 group-hover:text-slate-800 leading-tight line-clamp-2">{s.title}</span>
+                  {s.url && <ExternalLink size={10} className="shrink-0 mt-0.5 text-slate-300 group-hover:text-[#135bec]" />}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-auto p-4 rounded-xl bg-slate-50 border border-slate-100 italic text-[10px] text-slate-400 leading-normal">
           Recent research sessions are automatically archived after 24 hours of inactivity.
         </div>
       </aside>
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       <main className="flex-1 overflow-y-auto bg-white">
-        <div className="max-w-[1000px] mx-auto p-12 lg:p-20 space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          
-          {/* Breadcrumb / Label */}
+        <div className="max-w-[900px] mx-auto p-12 lg:p-20 space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+
           <div className="flex items-center gap-2 text-[#135bec]">
             <Sparkles size={14} className="fill-[#135bec]" />
             <span className="text-[10px] font-black uppercase tracking-[0.2em]">Deep Research Output</span>
           </div>
 
-          {/* Title Area */}
-          <div className="space-y-6">
-            <h1 className="text-4xl lg:text-5xl font-black text-slate-900 leading-[1.1] tracking-tight">
-              {query || "Multi-Modal Cognitive Architectures: Reconciling Neural Networks with Symbolic Reasoning Frameworks"}
-            </h1>
-            
+          <div className="space-y-4">
+            <h1 className="text-4xl lg:text-5xl font-black text-slate-900 leading-[1.1] tracking-tight">{query}</h1>
             <div className="flex flex-wrap items-center gap-6 text-[11px] font-bold text-slate-400">
               <span className="flex items-center gap-2">
                 <Calendar size={14} />
-                Oct 24, 2024
+                {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </span>
-              <span className="flex items-center gap-2">
-                <Cpu size={14} />
-                Generated by Scholar-1 Core
-              </span>
-              <span className="flex items-center gap-2">
-                <FileText size={14} />
-                12 Page Technical Output
-              </span>
+              <span className="flex items-center gap-2"><Cpu size={14} />Generated by DeepScholar AI</span>
+              {data && (
+                <span className="flex items-center gap-2">
+                  <FileText size={14} />
+                  Confidence: {Math.round(data.confidence_score * 100)}% · {data.iterations_used} iteration{data.iterations_used !== 1 ? 's' : ''}
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Abstract Box */}
-          <div className="bg-white rounded-3xl p-10 border-2 border-slate-50 shadow-2xl shadow-slate-200/40 relative">
-            <div className="absolute top-10 left-10 text-[11px] font-black uppercase tracking-[0.2em] text-[#135bec] opacity-50">
-              Abstract
-            </div>
-            <div className="pt-8 text-lg font-medium text-slate-600 leading-relaxed italic pr-4">
-              This inquiry explores the integration of neural pattern matching with symbolic logical structures. We demonstrate that hybrid architectures can overcome the "black-box" limitations of large-scale transformers while maintaining the creative synthesis capabilities inherent in probabilistic modeling.
-            </div>
-          </div>
-
-          {/* Section Layout */}
-          <div className="grid lg:grid-cols-2 gap-12 pt-8">
-            {/* 01. Introduction */}
-            <div className="space-y-6">
-              <div className="flex items-baseline gap-3">
-                <span className="text-2xl font-black text-[#135bec] opacity-20">01.</span>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Introduction</h2>
+          {/* Loading */}
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-32 gap-6">
+              <Loader2 size={40} className="text-[#135bec] animate-spin" />
+              <div className="text-center space-y-2">
+                <p className="text-sm font-black text-slate-700">Running agentic pipeline...</p>
+                <p className="text-xs text-slate-400">Planner → Researcher → Writer → Reviewer</p>
               </div>
-              <p className="text-[13px] font-medium text-slate-500 leading-relaxed">
-                The quest for Artificial General Intelligence (AGI) has historically vacillated between the "neat" (symbolic) and "scruffy" (connectionist) schools of thought. However, recent breakthroughs in prompt engineering and latent space manipulation suggest a middle path.
-              </p>
-              <p className="text-[13px] font-medium text-slate-500 leading-relaxed">
-                Hybrid architectures represent the synthesis of discrete reasoning and continuous vector representations.
-              </p>
             </div>
+          )}
 
-            {/* 02. Methodology */}
-            <div className="bg-[#f8faff] rounded-[32px] p-10 border border-indigo-50/50 space-y-6 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-8 opacity-10">
-                <Cpu size={60} className="text-[#135bec]" />
-              </div>
-              <div className="flex items-baseline gap-3">
-                <span className="text-2xl font-black text-[#135bec] opacity-20">02.</span>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Methodology</h2>
-              </div>
-              <ul className="space-y-4">
-                <li className="flex items-start gap-3 group">
-                  <div className="mt-0.5 p-0.5 rounded-full bg-emerald-50 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-all">
-                    <CheckCircle2 size={16} />
-                  </div>
-                  <span className="text-xs font-bold text-slate-600 leading-normal">Cross-reference 14,000+ peer-reviewed papers using RAG systems.</span>
-                </li>
-                <li className="flex items-start gap-3 group">
-                   <div className="mt-0.5 p-0.5 rounded-full bg-emerald-50 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-all">
-                    <CheckCircle2 size={16} />
-                  </div>
-                  <span className="text-xs font-bold text-slate-600 leading-normal">Simulation of cognitive bias in neural weighting distributions.</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          {/* 03. Results & Analysis */}
-          <div className="space-y-8 pt-12 pb-20">
-            <div className="flex items-baseline gap-3">
-              <span className="text-2xl font-black text-[#135bec] opacity-20">03.</span>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Results & Analysis</h2>
-            </div>
-            
-            <div className="rounded-[40px] border border-slate-100 bg-white overflow-hidden shadow-sm relative group">
-              <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Correlation Matrix v4.2</span>
-                <div className="flex items-center gap-2">
-                   <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Safe Work</span>
+          {/* Error */}
+          {error && !loading && (
+            errorType === 'rate_limit' ? (
+              <div className="flex flex-col items-center justify-center py-24 gap-6 text-center">
+                <div className="w-20 h-20 rounded-full bg-amber-50 border-2 border-amber-100 flex items-center justify-center">
+                  <Zap size={32} className="text-amber-400" />
+                </div>
+                <div className="space-y-2 max-w-sm">
+                  <p className="text-xl font-black text-slate-800">AI đang quá tải</p>
+                  <p className="text-sm font-medium text-slate-500 leading-relaxed">
+                    Hệ thống đã dùng hết lượt token cho phép trong phút này. Vui lòng đợi một chút rồi thử lại.
+                  </p>
+                  {retryAfter && (
+                    <p className="text-xs font-bold text-amber-500 flex items-center justify-center gap-1.5 pt-1">
+                      <Clock size={12} />Thử lại sau khoảng {retryAfter} giây
+                    </p>
+                  )}
                 </div>
               </div>
-              <div className="h-[450px] bg-gradient-to-br from-slate-950 via-[#135bec]/20 to-slate-900 relative p-12">
-                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10" />
-                 <div className="flex items-center justify-center h-full border-2 border-white/5 rounded-[32px] bg-slate-900/40 backdrop-blur-3xl">
-                    <div className="text-white/10 font-black text-5xl lg:text-7xl uppercase tracking-[0.2em] rotate-[-5deg] text-center select-none">
-                       ANALYSIS<br/>VISUALIZATION
-                    </div>
-                 </div>
+            ) : (
+              <div className="flex items-start gap-4 p-6 rounded-2xl bg-red-50 border border-red-100">
+                <AlertCircle size={20} className="text-red-500 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-sm font-black text-red-700">
+                    {errorType === 'network' ? 'Không thể kết nối đến AI service' : 'Đã xảy ra lỗi'}
+                  </p>
+                  <p className="text-xs text-red-500 leading-relaxed">{error}</p>
+                </div>
               </div>
-            </div>
-          </div>
+            )
+          )}
+
+          {/* Results */}
+          {data && !loading && (
+            <>
+              {abstract && (
+                <div className="bg-white rounded-3xl p-10 border-2 border-slate-50 shadow-2xl shadow-slate-200/40 relative">
+                  <div className="absolute top-10 left-10 text-[11px] font-black uppercase tracking-[0.2em] text-[#135bec] opacity-50">
+                    Abstract
+                  </div>
+                  <p className="pt-8 text-lg font-medium text-slate-600 leading-relaxed italic">{abstract}</p>
+                </div>
+              )}
+
+              <div className="pb-20">
+                <MarkdownContent content={data.answer} />
+              </div>
+            </>
+          )}
 
         </div>
       </main>
