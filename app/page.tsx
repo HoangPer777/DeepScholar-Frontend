@@ -30,12 +30,12 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { label: 'Feed', active: true, icon: List },
-  { label: 'AI Deep Research', active: false, icon: Sparkles, highlight: true },
-  { label: 'Library', active: false, icon: Library },
-  { label: 'Rankings', active: false, icon: ChartNoAxesColumn },
-  { label: 'Bookmarks', active: false, icon: Bookmark },
-  { label: 'Collaborations', active: false, icon: UserRound },
+  { label: 'Feed', active: true, icon: List, href: '/' },
+  { label: 'AI Deep Research', active: false, icon: Sparkles, highlight: true, href: '/deep-research' },
+  { label: 'Library', active: false, icon: Library, href: '/library' },
+  { label: 'Rankings', active: false, icon: ChartNoAxesColumn, href: '/rankings' },
+  { label: 'Bookmarks', active: false, icon: Bookmark, href: '/bookmarks' },
+  { label: 'Collaborations', active: false, icon: UserRound, href: '/collaborations' },
 ];
 
 const researchers = [
@@ -108,9 +108,9 @@ export default function HomePage() {
               const Icon = item.icon;
               if (item.highlight) {
                 return (
-                  <button
+                  <Link
                     key={item.label}
-                    type="button"
+                    href={item.href as Route}
                     className={`flex w-full rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 text-left text-indigo-700 shadow-[0_0_15px_rgba(19,91,236,0.2)] ${sidebarCollapsed ? 'items-center justify-center' : 'items-center justify-between'
                       }`}
                     title={sidebarCollapsed ? item.label : undefined}
@@ -122,21 +122,21 @@ export default function HomePage() {
                     {!sidebarCollapsed && (
                       <span className="rounded bg-[#135bec] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">AI</span>
                     )}
-                  </button>
+                  </Link>
                 );
               }
 
               return (
-                <button
+                <Link
                   key={item.label}
-                  type="button"
+                  href={item.href as Route}
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors ${item.active ? 'bg-blue-50 text-[#135bec]' : 'text-slate-600 hover:bg-slate-50'
                     }`}
                   title={sidebarCollapsed ? item.label : undefined}
                 >
                   <Icon size={18} />
                   {!sidebarCollapsed && item.label}
-                </button>
+                </Link>
               );
             })}
 
@@ -149,15 +149,15 @@ export default function HomePage() {
             {navItems.slice(4).map((item) => {
               const Icon = item.icon;
               return (
-                <button
+                <Link
                   key={item.label}
-                  type="button"
+                  href={item.href as Route}
                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
                   title={sidebarCollapsed ? item.label : undefined}
                 >
                   <Icon size={18} />
                   {!sidebarCollapsed && item.label}
-                </button>
+                </Link>
               );
             })}
           </nav>
@@ -216,9 +216,9 @@ export default function HomePage() {
                   />
                   <div className="absolute right-3 flex items-center gap-2">
                     <span className="rounded bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-400">⌘ + K</span>
-                    <button className="rounded-lg bg-[#135bec] px-4 py-2 text-sm font-bold text-white shadow-md transition-all hover:bg-blue-700">
+                    <Link href={'/deep-research' as Route} className="rounded-lg bg-[#135bec] px-4 py-2 text-sm font-bold text-white shadow-md transition-all hover:bg-blue-700">
                       Research
-                    </button>
+                    </Link>
                   </div>
                 </div>
               </div>

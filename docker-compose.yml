@@ -5,7 +5,7 @@ services:
     command: sh -c "npm install --legacy-peer-deps && npm run dev -- -H 0.0.0.0 -p 3000"
     environment:
       # host.docker.internal works out of the box on Docker Desktop for Windows/Mac to access ports mapped on localhost
-      - NEXT_PUBLIC_AI_URL=http://host.docker.internal:8001/api
+      - NEXT_PUBLIC_AI_URL=http://localhost:8001/api
       # OAuth credentials - set these in .env on host machine
       - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
       - NEXT_PUBLIC_FACEBOOK_APP_ID=${NEXT_PUBLIC_FACEBOOK_APP_ID}
