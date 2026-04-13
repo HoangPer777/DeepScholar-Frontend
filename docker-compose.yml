@@ -1,15 +1,13 @@
 services:
   frontend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     container_name: deepscholar-frontend
-    command: sh -c "npm install --legacy-peer-deps && npm run dev -- -H 0.0.0.0 -p 3000"
     environment:
-      # host.docker.internal works out of the box on Docker Desktop for Windows/Mac to access ports mapped on localhost
       - NEXT_PUBLIC_AI_URL=http://localhost:8001/api
-      # OAuth credentials - set these in .env on host machine
       - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
       - NEXT_PUBLIC_FACEBOOK_APP_ID=${NEXT_PUBLIC_FACEBOOK_APP_ID}
-      # Improve file change detection on Docker Desktop bind mounts (Windows/Mac)
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
       - CHOKIDAR_INTERVAL=300
