@@ -274,15 +274,19 @@ export default function UploadPage() {
             if (!token) {
                 throw new Error('Your login session has expired. Please login again and retry upload.');
             }
-            await api.post('/ai/trigger/', {
-                pdf_url: public_url,
-                slug: articleData.slug,
-                article_id: articleData.id ?? 1,
-            }, {
+            const aiRes = await fetch('/api/ai-proxy/pdf/upload', {
+                method: 'POST',
                 headers: {
-                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
                 },
+                body: JSON.stringify({
+                    pdf_url: public_url,
+                    slug: articleData.slug,
+                    article_id: articleData.id ?? 1,
+                }),
             });
+            if (!aiRes.ok) throw new Error(`AI trigger failed: HTTP ${aiRes.status}`);
 
             setProgress(75);
 

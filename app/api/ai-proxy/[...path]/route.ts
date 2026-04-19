@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const AI_URL = process.env.AI_URL || process.env.NEXT_PUBLIC_AI_URL || 'http://localhost:8001/api';
+const AI_URL = process.env.AI_URL || 'http://localhost:8001/api';
 
 export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
   return proxyRequest(req, params.path, 'GET');
