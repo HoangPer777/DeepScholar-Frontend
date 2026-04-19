@@ -1,4 +1,8 @@
-const BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000/api/v1';
+// In browser: use proxy route to avoid mixed-content (http backend behind https Vercel)
+// On server: call backend directly
+const BASE_URL = typeof window === 'undefined'
+  ? (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000/api/v1')
+  : '/api/proxy';
 
 export const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
   const url = `${BASE_URL}${endpoint}`;
