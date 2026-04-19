@@ -17,6 +17,11 @@
     "react-facebook-login": "^4.1.1",
     "react-markdown": "^10.1.0"
   },
+  "overrides": {
+    "react-facebook-login": {
+      "react": "$react"
+    }
+  },
   "devDependencies": {
     "@types/node": "20.17.57",
     "@types/react": "18.3.12",
