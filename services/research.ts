@@ -1,4 +1,7 @@
-const AI_URL = process.env.NEXT_PUBLIC_AI_URL || 'http://localhost:8001/api';
+// Use proxy to avoid mixed-content when deployed on Vercel (https) calling http backend
+const AI_URL = typeof window === 'undefined'
+  ? (process.env.AI_URL || process.env.NEXT_PUBLIC_AI_URL || 'http://localhost:8001/api')
+  : '/api/ai-proxy';
 
 export type ResearchErrorType = 'rate_limit' | 'network' | 'server';
 
