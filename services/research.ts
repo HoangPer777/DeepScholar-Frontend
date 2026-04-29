@@ -43,36 +43,72 @@ export interface DeepResearchResponse {
 }
 
 export async function runDeepResearch(query: string): Promise<DeepResearchResponse> {
-  let res: Response;
-
+  // Step 1: Start the job
+  let startRes: Response;
   try {
-    res = await fetch(`${AI_URL}/research/deep-research`, {
+    startRes = await fetch(`${AI_URL}/research/deep-research`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
     });
   } catch (networkErr: any) {
-    const isTimeout = networkErr?.message?.toLowerCase().includes('timeout');
     throw new ResearchError(
-      isTimeout
-        ? `Request timed out. The AI pipeline can take up to 3 minutes — please try again.`
-        : `Cannot reach AI service at ${AI_URL}. Make sure the service is running on port 8001.`,
+      `Cannot reach AI service. Make sure the service is running.`,
       'network'
     );
   }
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    const detail: string = err.detail || res.statusText;
-
-    if (res.status === 500 && detail.includes('rate_limit_exceeded')) {
-      const waitMatch = detail.match(/try again in ([\d.]+)s/);
-      const retryAfter = waitMatch ? Math.ceil(parseFloat(waitMatch[1])) : 60;
-      throw new ResearchError('rate_limit', 'rate_limit', retryAfter);
-    }
-
-    throw new ResearchError(`AI service returned ${res.status}: ${detail}`, 'server');
+  if (!startRes.ok) {
+    const err = await startRes.json().catch(() => ({ detail: startRes.statusText }));
+    throw new ResearchError(`AI service returned ${startRes.status}: ${err.detail}`, 'server');
   }
 
-  return res.json();
+  const { task_id } = await startRes.json();
+  if (!task_id) {
+    throw new ResearchError('No task_id returned from AI service', 'server');
+  }
+
+  // Step 2: Poll until done
+  const pollUrl = `${AI_URL}/research/status/${task_id}`;
+  const maxWaitMs = 5 * 60 * 1000; // 5 minutes
+  const intervalMs = 3000;
+  const started = Date.now();
+
+  while (Date.now() - started < maxWaitMs) {
+    await new Promise((r) => setTimeout(r, intervalMs));
+
+    let pollRes: Response;
+    try {
+      pollRes = await fetch(pollUrl);
+    } catch {
+      // transient network error, keep polling
+      continue;
+    }
+
+    if (pollRes.status === 404) {
+      throw new ResearchError('Research task not found', 'server');
+    }
+
+    if (!pollRes.ok) {
+      const err = await pollRes.json().catch(() => ({ detail: pollRes.statusText }));
+      const detail: string = err.detail || pollRes.statusText;
+      if (pollRes.status === 500 && detail.includes('rate_limit_exceeded')) {
+        const waitMatch = detail.match(/try again in ([\d.]+)s/);
+        const retryAfter = waitMatch ? Math.ceil(parseFloat(waitMatch[1])) : 60;
+        throw new ResearchError('rate_limit', 'rate_limit', retryAfter);
+      }
+      throw new ResearchError(`AI service error: ${detail}`, 'server');
+    }
+
+    const data = await pollRes.json();
+    if (data.status === 'done') {
+      return data as DeepResearchResponse;
+    }
+    // status === 'pending', keep polling
+  }
+
+  throw new ResearchError(
+    'Research timed out after 5 minutes. Please try again.',
+    'network'
+  );
 }

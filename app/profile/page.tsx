@@ -16,6 +16,7 @@ import {
   Info,
   Library,
   List,
+  Loader2,
   MoreVertical,
   Search,
   Share2,
@@ -53,6 +54,19 @@ export default function ProfilePage() {
   // Loading & Error states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+
+  const handleRemoveSaved = async (articleId: number) => {
+    setRemovingId(articleId);
+    try {
+      await api.post(`/articles/${articleId}/bookmark/`, {});
+      setSavedPapers((prev) => prev.filter((p) => p.id !== articleId));
+    } catch (err: any) {
+      console.error('Failed to remove bookmark:', err);
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   // Fetch user data and articles on mount
   useEffect(() => {
@@ -301,6 +315,11 @@ export default function ProfilePage() {
                         className={`pb-2 text-sm font-bold transition-colors ${activeTab === 'notifications' ? 'border-b-2 border-[#135bec] text-[#135bec]' : 'text-slate-500 hover:text-slate-700'}`}
                       >
                         Notifications
+                        {notifications.filter((n) => !n.is_read).length > 0 && (
+                          <span className="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-black text-white">
+                            {notifications.filter((n) => !n.is_read).length}
+                          </span>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -365,8 +384,15 @@ export default function ProfilePage() {
                               {paper.abstract && <p className="mt-2 line-clamp-4 text-sm text-slate-600">{paper.abstract}</p>}
                               <p className="mt-2 text-xs text-slate-500">Saved on {new Date(paper.created_at).toLocaleDateString()}</p>
                             </div>
-                            <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50">
-                              Remove
+                            <button
+                              onClick={() => handleRemoveSaved(paper.id)}
+                              disabled={removingId === paper.id}
+                              className="shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                            >
+                              {removingId === paper.id
+                                ? <Loader2 size={13} className="animate-spin" />
+                                : 'Remove'
+                              }
                             </button>
                           </div>
                         </article>
@@ -383,11 +409,62 @@ export default function ProfilePage() {
                       </div>
                     ) : (
                       notifications.map((notif: any) => (
-                        <article key={notif.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                          <p className="text-sm font-semibold text-slate-800">{notif.message || notif.content}</p>
-                          <p className="mt-1 text-xs text-slate-500">{new Date(notif.created_at).toLocaleDateString()}</p>
+                        <article
+                          key={notif.id}
+                          className={`rounded-2xl border bg-white p-5 shadow-sm transition-colors ${notif.is_read ? 'border-slate-200' : 'border-blue-200 bg-blue-50/30'}`}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0 flex-1">
+                              {/* Actor name */}
+                              {notif.actor && (
+                                <p className="text-xs font-bold text-[#135bec]">
+                                  {notif.actor.full_name || notif.actor.email}
+                                </p>
+                              )}
+                              {/* Verb — the actual notification message */}
+                              <p className="mt-0.5 text-sm font-semibold text-slate-800">
+                                {notif.verb || notif.message || notif.content || 'New notification'}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-400">
+                                {new Date(notif.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                            {/* Mark as read button */}
+                            {!notif.is_read && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await api.post(`/notifications/${notif.id}/read/`, {});
+                                    setNotifications((prev) =>
+                                      prev.map((n) => n.id === notif.id ? { ...n, is_read: true } : n)
+                                    );
+                                  } catch {}
+                                }}
+                                className="shrink-0 rounded-lg border border-blue-200 bg-white px-2.5 py-1 text-xs font-bold text-[#135bec] hover:bg-blue-50"
+                              >
+                                Mark read
+                              </button>
+                            )}
+                          </div>
                         </article>
                       ))
+                    )}
+                    {/* Mark all as read */}
+                    {notifications.some((n) => !n.is_read) && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const unread = notifications.filter((n) => !n.is_read);
+                          await Promise.allSettled(
+                            unread.map((n) => api.post(`/notifications/${n.id}/read/`, {}))
+                          );
+                          setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+                        }}
+                        className="w-full rounded-lg border border-slate-200 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50"
+                      >
+                        Mark all as read
+                      </button>
                     )}
                   </>
                 )}

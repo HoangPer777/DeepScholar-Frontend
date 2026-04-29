@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { api } from '@/lib/api';
+import { interactionsService, isLoggedIn } from '@/services/interactions';
+import NotificationDropdown from '@/components/NotificationDropdown';
 import {
   Atom,
   BadgeCheck,
-  Bell,
   Bookmark,
   Bot,
   Brain,
@@ -20,11 +21,11 @@ import {
   Heart,
   Library,
   List,
+  Loader2,
   MessageSquare,
   Search,
   Share2,
   Sparkles,
-  Star,
   Trophy,
   UserRound,
 } from 'lucide-react';
@@ -50,27 +51,134 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Per-article interaction state: { [articleId]: { liked, like_count, bookmarked, bookmark_count, share_count, likeLoading, bookmarkLoading, shareLoading } }
+  const [interactions, setInteractions] = useState<Record<number, {
+    liked: boolean;
+    like_count: number;
+    bookmarked: boolean;
+    bookmark_count: number;
+    share_count: number;
+    likeLoading: boolean;
+    bookmarkLoading: boolean;
+    shareLoading: boolean;
+  }>>({});
+
   useEffect(() => {
     async function fetchArticles() {
       try {
         const data = await api.get('/articles/');
-        if (data.results) {
-            setPapers(data.results);
-        } else if (Array.isArray(data)) {
-            setPapers(data);
-        } else {
-            console.error("Unknown data format:", data);
-            setErrorMsg("Unknown API response format.");
-            setPapers([]);
-        }
+        const list = data.results ?? (Array.isArray(data) ? data : []);
+        setPapers(list);
+        // Initialise interaction state from API counts
+        const init: typeof interactions = {};
+        list.forEach((p: any) => {
+          init[p.id] = {
+            liked: false,
+            like_count: p.like_count || 0,
+            bookmarked: false,
+            bookmark_count: p.bookmark_count || 0,
+            share_count: p.share_count || 0,
+            likeLoading: false,
+            bookmarkLoading: false,
+            shareLoading: false,
+          };
+        });
+        setInteractions(init);
       } catch (error: any) {
-        console.error("Failed to fetch articles:", error);
+        console.error('Failed to fetch articles:', error);
         setErrorMsg(error.message || String(error));
       } finally {
         setLoading(false);
       }
     }
     fetchArticles();
+  }, []);
+
+  const handleLike = useCallback(async (articleId: number) => {
+    if (!isLoggedIn()) {
+      window.location.href = '/login';
+      return;
+    }
+    setInteractions((prev) => ({
+      ...prev,
+      [articleId]: { ...prev[articleId], likeLoading: true },
+    }));
+    try {
+      const res = await interactionsService.toggleLike(articleId);
+      setInteractions((prev) => ({
+        ...prev,
+        [articleId]: {
+          ...prev[articleId],
+          liked: res.liked,
+          like_count: res.like_count,
+          likeLoading: false,
+        },
+      }));
+    } catch {
+      setInteractions((prev) => ({
+        ...prev,
+        [articleId]: { ...prev[articleId], likeLoading: false },
+      }));
+    }
+  }, []);
+
+  const handleBookmark = useCallback(async (articleId: number) => {
+    if (!isLoggedIn()) {
+      window.location.href = '/login';
+      return;
+    }
+    setInteractions((prev) => ({
+      ...prev,
+      [articleId]: { ...prev[articleId], bookmarkLoading: true },
+    }));
+    try {
+      const res = await interactionsService.toggleBookmark(articleId);
+      setInteractions((prev) => ({
+        ...prev,
+        [articleId]: {
+          ...prev[articleId],
+          bookmarked: res.bookmarked,
+          bookmark_count: res.bookmark_count,
+          bookmarkLoading: false,
+        },
+      }));
+    } catch {
+      setInteractions((prev) => ({
+        ...prev,
+        [articleId]: { ...prev[articleId], bookmarkLoading: false },
+      }));
+    }
+  }, []);
+
+  const handleShare = useCallback(async (articleId: number, slug: string) => {
+    // Copy link to clipboard
+    const url = `${window.location.origin}/papers/${slug}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // fallback: open share dialog
+    }
+    if (!isLoggedIn()) return;
+    setInteractions((prev) => ({
+      ...prev,
+      [articleId]: { ...prev[articleId], shareLoading: true },
+    }));
+    try {
+      const res = await interactionsService.shareArticle(articleId, 'clipboard');
+      setInteractions((prev) => ({
+        ...prev,
+        [articleId]: {
+          ...prev[articleId],
+          share_count: res.share_count,
+          shareLoading: false,
+        },
+      }));
+    } catch {
+      setInteractions((prev) => ({
+        ...prev,
+        [articleId]: { ...prev[articleId], shareLoading: false },
+      }));
+    }
   }, []);
 
   return (
@@ -186,9 +294,7 @@ export default function HomePage() {
                 />
               </div>
 
-              <button className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-[#dfe4ef] bg-[#f7f8fc] text-slate-500 transition hover:bg-slate-100">
-                <Bell size={17} />
-              </button>
+              <NotificationDropdown />
 
               <a href="/upload" className="flex h-10 items-center gap-2 rounded-[10px] bg-[#1f5fe4] px-4 text-sm font-bold text-white transition hover:bg-[#1a53c8]">
                 <FileUp size={16} />
@@ -245,7 +351,14 @@ export default function HomePage() {
                   <div className="flex justify-center p-8"><span className="text-red-500 font-bold">{errorMsg}</span></div>
                 ) : papers.length === 0 ? (
                   <div className="flex justify-center p-8"><span className="text-slate-400">No articles available.</span></div>
-                ) : papers.map((paper) => (
+                ) : papers.map((paper) => {
+                  const ix = interactions[paper.id] ?? {
+                    liked: false, like_count: paper.like_count || 0,
+                    bookmarked: false, bookmark_count: paper.bookmark_count || 0,
+                    share_count: paper.share_count || 0,
+                    likeLoading: false, bookmarkLoading: false, shareLoading: false,
+                  };
+                  return (
                   <article
                     key={paper.id || paper.slug}
                     className="overflow-hidden rounded-xl border border-slate-200 bg-white transition-all hover:shadow-xl hover:shadow-blue-500/5"
@@ -266,7 +379,23 @@ export default function HomePage() {
                               : 'Unknown Author'}
                           </p>
                         </div>
-                        <Bookmark size={20} className="cursor-pointer text-slate-300 hover:text-[#135bec]" />
+                        {/* Bookmark button — top right */}
+                        <button
+                          type="button"
+                          onClick={() => handleBookmark(paper.id)}
+                          disabled={ix.bookmarkLoading}
+                          title={ix.bookmarked ? 'Bỏ lưu' : 'Lưu bài viết'}
+                          className="shrink-0 transition-colors disabled:opacity-50"
+                          aria-label="Bookmark"
+                        >
+                          {ix.bookmarkLoading
+                            ? <Loader2 size={20} className="animate-spin text-slate-400" />
+                            : <Bookmark
+                                size={20}
+                                className={ix.bookmarked ? 'fill-[#135bec] text-[#135bec]' : 'text-slate-300 hover:text-[#135bec]'}
+                              />
+                          }
+                        </button>
                       </div>
 
                       <div className="mt-4">
@@ -276,17 +405,42 @@ export default function HomePage() {
 
                       <div className="mt-4 flex flex-wrap gap-4 text-slate-500">
                         <span className="flex items-center gap-1.5 text-xs font-medium">
-                          <Eye size={14} className="text-slate-400" /> 
+                          <Eye size={14} className="text-slate-400" />
                           {paper.view_count || 0} Lượt xem
                         </span>
-                        <span className="flex items-center gap-1.5 text-xs font-medium">
-                          <Heart size={14} className="text-slate-400" /> 
-                          {paper.like_count || 0} Thích
-                        </span>
-                        <span className="flex items-center gap-1.5 text-xs font-medium">
-                          <Share2 size={14} className="text-slate-400" /> 
-                          {paper.share_count || 0} Chia sẻ
-                        </span>
+                        {/* Like button */}
+                        <button
+                          type="button"
+                          onClick={() => handleLike(paper.id)}
+                          disabled={ix.likeLoading}
+                          title={ix.liked ? 'Bỏ thích' : 'Thích'}
+                          className="flex items-center gap-1.5 text-xs font-medium transition-colors disabled:opacity-50 hover:text-red-500"
+                          aria-label="Like"
+                        >
+                          {ix.likeLoading
+                            ? <Loader2 size={14} className="animate-spin" />
+                            : <Heart
+                                size={14}
+                                className={ix.liked ? 'fill-red-500 text-red-500' : 'text-slate-400'}
+                              />
+                          }
+                          {ix.like_count} Thích
+                        </button>
+                        {/* Share button */}
+                        <button
+                          type="button"
+                          onClick={() => handleShare(paper.id, paper.slug)}
+                          disabled={ix.shareLoading}
+                          title="Chia sẻ (copy link)"
+                          className="flex items-center gap-1.5 text-xs font-medium transition-colors disabled:opacity-50 hover:text-[#135bec]"
+                          aria-label="Share"
+                        >
+                          {ix.shareLoading
+                            ? <Loader2 size={14} className="animate-spin" />
+                            : <Share2 size={14} className="text-slate-400" />
+                          }
+                          {ix.share_count} Chia sẻ
+                        </button>
                       </div>
                     </div>
 
@@ -307,7 +461,8 @@ export default function HomePage() {
                       </Link>
                     </div>
                   </article>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

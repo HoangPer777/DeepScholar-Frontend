@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { Route } from 'next';
 import {
   AlertCircle,
@@ -15,14 +15,19 @@ import {
   ChevronLeft,
   ChevronRight,
   FileUp,
+  Heart,
   Library,
   List,
+  Loader2,
+  MessageSquare,
   Search,
   Send,
+  Share2,
   Sparkles,
   UserRound,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { interactionsService, isLoggedIn } from '@/services/interactions';
 
 const navItems = [
   { label: 'Feed', href: '/' as Route, active: false, icon: List },
@@ -47,6 +52,9 @@ type ArticleDetail = {
   content?: string;
   pdf_url?: string;
   created_at: string;
+  like_count?: number;
+  bookmark_count?: number;
+  share_count?: number;
   authors?: ArticleAuthor[];
 };
 
@@ -72,6 +80,23 @@ export default function PaperDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Interaction state
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [likeLoading, setLikeLoading] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [bookmarkCount, setBookmarkCount] = useState(0);
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
+  const [shareCount, setShareCount] = useState(0);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  // Comments state
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [commentLoading, setCommentLoading] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+
   const [prompt, setPrompt] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
@@ -82,12 +107,14 @@ export default function PaperDetailPage() {
 
   useEffect(() => {
     if (!slug) return;
-
     async function fetchArticle() {
       try {
         setLoading(true);
         const data = await api.get(`/articles/${slug}/`);
         setArticle(data);
+        setLikeCount(data.like_count || 0);
+        setBookmarkCount(data.bookmark_count || 0);
+        setShareCount(data.share_count || 0);
         setError(null);
       } catch (err: any) {
         setError(err.message || 'Khong the tai chi tiet bai bao.');
@@ -95,9 +122,77 @@ export default function PaperDetailPage() {
         setLoading(false);
       }
     }
-
     fetchArticle();
   }, [slug]);
+
+  const handleLike = useCallback(async () => {
+    if (!article) return;
+    if (!isLoggedIn()) { window.location.href = '/login'; return; }
+    setLikeLoading(true);
+    try {
+      const res = await interactionsService.toggleLike(article.id);
+      setLiked(res.liked);
+      setLikeCount(res.like_count);
+    } finally {
+      setLikeLoading(false);
+    }
+  }, [article]);
+
+  const handleBookmark = useCallback(async () => {
+    if (!article) return;
+    if (!isLoggedIn()) { window.location.href = '/login'; return; }
+    setBookmarkLoading(true);
+    try {
+      const res = await interactionsService.toggleBookmark(article.id);
+      setBookmarked(res.bookmarked);
+      setBookmarkCount(res.bookmark_count);
+    } finally {
+      setBookmarkLoading(false);
+    }
+  }, [article]);
+
+  const handleShare = useCallback(async () => {
+    if (!article) return;
+    const url = window.location.href;
+    try { await navigator.clipboard.writeText(url); } catch {}
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2000);
+    if (!isLoggedIn()) return;
+    setShareLoading(true);
+    try {
+      const res = await interactionsService.shareArticle(article.id, 'clipboard');
+      setShareCount(res.share_count);
+    } finally {
+      setShareLoading(false);
+    }
+  }, [article]);
+
+  const loadComments = useCallback(async () => {
+    if (!article) return;
+    try {
+      const data = await interactionsService.getComments(article.id);
+      setComments(data.results ?? data);
+    } catch {}
+  }, [article]);
+
+  const handleToggleComments = useCallback(async () => {
+    if (!showComments && comments.length === 0) await loadComments();
+    setShowComments((v) => !v);
+  }, [showComments, comments.length, loadComments]);
+
+  const handlePostComment = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!article || !commentText.trim()) return;
+    if (!isLoggedIn()) { window.location.href = '/login'; return; }
+    setCommentLoading(true);
+    try {
+      await interactionsService.postComment(article.id, commentText.trim());
+      setCommentText('');
+      await loadComments();
+    } finally {
+      setCommentLoading(false);
+    }
+  }, [article, commentText, loadComments]);
 
   const authorText = useMemo(() => {
     if (!article?.authors || article.authors.length === 0) return 'Unknown Author';
@@ -315,7 +410,119 @@ export default function PaperDetailPage() {
 
                 <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="mb-4 flex items-center justify-between">
+                    {/* Article header + interaction bar */}
+                    <div className="mb-4">
+                      <h1 className="text-xl font-bold leading-tight text-slate-900">{article.title}</h1>
+                      <p className="mt-1 text-sm font-medium text-blue-700/80">{authorText}</p>
+                      <p className="mt-1 text-xs text-slate-400">Published {new Date(article.created_at).toLocaleDateString()}</p>
+
+                      {/* Interaction bar */}
+                      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+                        {/* Like */}
+                        <button
+                          type="button"
+                          onClick={handleLike}
+                          disabled={likeLoading}
+                          title={liked ? 'Bỏ thích' : 'Thích bài báo'}
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                        >
+                          {likeLoading
+                            ? <Loader2 size={16} className="animate-spin" />
+                            : <Heart size={16} className={liked ? 'fill-red-500 text-red-500' : 'text-slate-400'} />
+                          }
+                          <span className={liked ? 'text-red-600' : 'text-slate-600'}>{likeCount}</span>
+                        </button>
+
+                        {/* Bookmark */}
+                        <button
+                          type="button"
+                          onClick={handleBookmark}
+                          disabled={bookmarkLoading}
+                          title={bookmarked ? 'Bỏ lưu' : 'Lưu bài báo'}
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-[#135bec] disabled:opacity-50"
+                        >
+                          {bookmarkLoading
+                            ? <Loader2 size={16} className="animate-spin" />
+                            : <Bookmark size={16} className={bookmarked ? 'fill-[#135bec] text-[#135bec]' : 'text-slate-400'} />
+                          }
+                          <span className={bookmarked ? 'text-[#135bec]' : 'text-slate-600'}>{bookmarkCount}</span>
+                        </button>
+
+                        {/* Share */}
+                        <button
+                          type="button"
+                          onClick={handleShare}
+                          disabled={shareLoading}
+                          title="Copy link bài báo"
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold transition-colors hover:border-green-200 hover:bg-green-50 hover:text-green-700 disabled:opacity-50"
+                        >
+                          {shareLoading
+                            ? <Loader2 size={16} className="animate-spin" />
+                            : <Share2 size={16} className="text-slate-400" />
+                          }
+                          <span className="text-slate-600">{shareCopied ? 'Đã copy!' : shareCount}</span>
+                        </button>
+
+                        {/* Comments toggle */}
+                        <button
+                          type="button"
+                          onClick={handleToggleComments}
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                        >
+                          <MessageSquare size={16} className="text-slate-400" />
+                          {showComments ? 'Ẩn bình luận' : `Bình luận (${comments.length})`}
+                        </button>
+                      </div>
+
+                      {/* Comments section */}
+                      {showComments && (
+                        <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+                          {/* Post comment form */}
+                          <form onSubmit={handlePostComment} className="flex gap-2">
+                            <input
+                              value={commentText}
+                              onChange={(e) => setCommentText(e.target.value)}
+                              placeholder={isLoggedIn() ? 'Viết bình luận...' : 'Đăng nhập để bình luận'}
+                              disabled={!isLoggedIn() || commentLoading}
+                              className="h-9 flex-1 rounded-lg border border-slate-200 px-3 text-sm placeholder:text-slate-400 focus:border-[#135bec] focus:outline-none disabled:bg-slate-50"
+                            />
+                            <button
+                              type="submit"
+                              disabled={!commentText.trim() || commentLoading || !isLoggedIn()}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#135bec] text-white transition hover:bg-blue-700 disabled:opacity-40"
+                            >
+                              {commentLoading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                            </button>
+                          </form>
+
+                          {/* Comment list */}
+                          {comments.length === 0 ? (
+                            <p className="text-center text-xs text-slate-400 py-4">Chưa có bình luận nào.</p>
+                          ) : (
+                            comments.map((c: any) => (
+                              <div key={c.id} className="rounded-lg bg-slate-50 p-3">
+                                <p className="text-xs font-bold text-slate-700">
+                                  {c.user?.full_name || c.user?.email || 'Người dùng'}
+                                </p>
+                                <p className="mt-1 text-sm text-slate-600">{c.content}</p>
+                                {c.replies?.length > 0 && (
+                                  <div className="mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                                    {c.replies.map((r: any) => (
+                                      <div key={r.id}>
+                                        <p className="text-xs font-bold text-slate-600">{r.user?.full_name || 'Người dùng'}</p>
+                                        <p className="text-xs text-slate-500">{r.content}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <BookOpen size={18} className="text-[#135bec]" />
                         <h2 className="text-base font-bold text-slate-900">PDF Reader</h2>
