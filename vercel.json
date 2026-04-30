@@ -1,7 +1,8 @@
 {
+  "regions": ["sin1"],
   "functions": {
     "app/api/ai-proxy/[...path]/route.ts": {
-      "maxDuration": 300
+      "maxDuration": 60
     }
   }
 }
