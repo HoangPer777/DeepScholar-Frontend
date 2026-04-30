@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const maxDuration = 30; // Prevent Vercel timeout before AI service returns task_id
+
 const AI_URL = process.env.AI_URL || 'http://localhost:8001/api';
 
 export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
