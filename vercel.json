@@ -3,6 +3,6 @@
   "functions": {
     "app/api/ai-proxy/[...path]/route.ts": {
       "maxDuration": 60
-    }
+    } 
   }
 }
