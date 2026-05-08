@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveAiUrl } from './route-helpers';
 
-export const maxDuration = 30; // Prevent Vercel timeout before AI service returns task_id
-
-const AI_URL = process.env.AI_URL || 'http://localhost:8001/api';
+export const maxDuration = 60; // Vercel: allow up to 60s per proxy request
 
 export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
   return proxyRequest(req, params.path, 'GET');
@@ -15,7 +14,9 @@ export async function POST(req: NextRequest, { params }: { params: { path: strin
 async function proxyRequest(req: NextRequest, pathSegments: string[], method: string) {
   const path = pathSegments.join('/');
   const search = req.nextUrl.search;
-  const targetUrl = `${AI_URL}/${path}${search}`;
+
+  const aiUrl = await resolveAiUrl();
+  const targetUrl = `${aiUrl}/${path}${search}`;
 
   const headers: Record<string, string> = {
     'Content-Type': req.headers.get('content-type') || 'application/json',
@@ -37,6 +38,9 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
       headers: { 'Content-Type': res.headers.get('content-type') || 'application/json' },
     });
   } catch (err: any) {
-    return NextResponse.json({ detail: err.message }, { status: 502 });
+    return NextResponse.json(
+      { detail: `Cannot reach AI service at ${aiUrl}: ${err.message}` },
+      { status: 502 }
+    );
   }
 }
