@@ -92,7 +92,7 @@ export default function DeepResearchPage() {
   const handleStartResearch = async (e: React.FormEvent, overrideQuery?: string) => {
     e.preventDefault();
     const q = (overrideQuery ?? query).trim();
-    if (!q) return;
+    if (!q || loading) return; // guard: prevent double submit while job is running
 
     setCurrentQuery(q);
     setState('results');
