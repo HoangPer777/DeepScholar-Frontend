@@ -68,25 +68,41 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
     throw new ResearchError('No task_id returned from AI service', 'server');
   }
 
-  // Step 2: Poll until done
+  // Step 2: Poll until done — V13: in-flight guard, conservative interval
+  // NOTE: Keep interval at 3s (original) — job takes 3-5 min, aggressive backoff
+  // causes missed results. Adaptive backoff only kicks in after 10+ pending polls.
   const pollUrl = `${AI_URL}/research/status/${task_id}`;
-  const maxWaitMs = 5 * 60 * 1000; // 5 minutes
-  const intervalMs = 3000;
+  const maxWaitMs = 8 * 60 * 1000; // 8 minutes (jobs can take 4-5 min with retries)
+  const INITIAL_INTERVAL_MS = 3000;  // keep original 3s — job is long, don't miss result
+  const MAX_INTERVAL_MS = 8000;      // cap at 8s max (not 15s — too slow to catch done)
+  const BACKOFF_MULTIPLIER = 1.15;
+  const BACKOFF_AFTER_N_POLLS = 10;  // only backoff after 10 consecutive pending (30s)
+
+  let currentInterval = INITIAL_INTERVAL_MS;
+  let consecutivePending = 0;
+  let pollInFlight = false;
   const started = Date.now();
 
   while (Date.now() - started < maxWaitMs) {
-    await new Promise((r) => setTimeout(r, intervalMs));
+    await new Promise((r) => setTimeout(r, currentInterval));
 
+    // In-flight guard: skip if previous poll hasn't completed
+    if (pollInFlight) continue;
+
+    pollInFlight = true;
     let pollRes: Response;
     try {
       pollRes = await fetch(pollUrl);
     } catch {
       // transient network error, keep polling
+      pollInFlight = false;
       continue;
+    } finally {
+      pollInFlight = false;
     }
 
     if (pollRes.status === 404) {
-      throw new ResearchError('Research task not found', 'server');
+      throw new ResearchError('Research task not found — server may have restarted. Please try again.', 'server');
     }
 
     if (!pollRes.ok) {
@@ -104,11 +120,16 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
     if (data.status === 'done') {
       return data as DeepResearchResponse;
     }
-    // status === 'pending', keep polling
+
+    // status === 'pending' — gentle adaptive backoff only after many polls
+    consecutivePending++;
+    if (consecutivePending % BACKOFF_AFTER_N_POLLS === 0) {
+      currentInterval = Math.min(currentInterval * BACKOFF_MULTIPLIER, MAX_INTERVAL_MS);
+    }
   }
 
   throw new ResearchError(
-    'Research timed out after 5 minutes. Please try again.',
+    'Research timed out after 8 minutes. The query may be too complex — please try a more specific topic.',
     'network'
   );
 }
