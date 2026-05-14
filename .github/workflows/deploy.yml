@@ -18,6 +18,31 @@ jobs:
       - name: Pull Vercel project settings
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Sync environment variables to Vercel
+        # AI_SERVICE_URL secret = http://3.1.140.150:8001/api
+        # BACKEND_URL secret    = http://3.1.140.150:8000/api/v1
+        # Nếu secrets chưa set thì bước này bị skip (exit 0), không fail build
+        env:
+          AI_SERVICE_URL: ${{ secrets.AI_SERVICE_URL }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -n "$AI_SERVICE_URL" ]; then
+            vercel env rm AI_URL production --yes --token="$VERCEL_TOKEN" 2>/dev/null || true
+            echo "$AI_SERVICE_URL" | vercel env add AI_URL production --token="$VERCEL_TOKEN"
+            echo "✓ AI_URL synced to Vercel: $AI_SERVICE_URL"
+          else
+            echo "⚠ AI_SERVICE_URL secret not set — skipping AI_URL sync"
+          fi
+
+          if [ -n "$BACKEND_URL" ]; then
+            vercel env rm BACKEND_URL production --yes --token="$VERCEL_TOKEN" 2>/dev/null || true
+            echo "$BACKEND_URL" | vercel env add BACKEND_URL production --token="$VERCEL_TOKEN"
+            echo "✓ BACKEND_URL synced to Vercel: $BACKEND_URL"
+          else
+            echo "⚠ BACKEND_URL secret not set — skipping BACKEND_URL sync"
+          fi
+
       - name: Build project
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 

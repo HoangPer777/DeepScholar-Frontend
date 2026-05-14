@@ -5,8 +5,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: deepscholar-frontend
     environment:
-      - BACKEND_URL=http://172.17.0.1:8000/api/v1
-      - AI_URL=http://172.17.0.1:8001/api
+      - BACKEND_URL=http://host.docker.internal:8000/api/v1
+      - AI_URL=http://host.docker.internal:8001/api
       - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
       - NEXT_PUBLIC_FACEBOOK_APP_ID=${NEXT_PUBLIC_FACEBOOK_APP_ID}
       - WATCHPACK_POLLING=true

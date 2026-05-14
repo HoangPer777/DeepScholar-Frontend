@@ -1,41 +1,30 @@
 /**
  * Shared helpers for ai-proxy route.
- * Extracted for testability.
+ *
+ * URL resolution — đọc AI_URL env var, không probe, không cache.
+ *
+ * Cấu hình theo môi trường:
+ *  - Local Docker:  AI_URL=http://host.docker.internal:8001/api  (docker-compose.yml)
+ *  - Local bare:    AI_URL=http://localhost:8001/api             (.env.local)
+ *  - Production:    AI_URL=http://3.1.140.150:8001/api           (Vercel env var)
  */
-
-const CONFIGURED_AI_URL = process.env.AI_URL;
 
 export const FALLBACK_URLS = [
   'http://host.docker.internal:8001/api',
   'http://localhost:8001/api',
 ];
 
-/**
- * Resolve AI service base URL.
- *
- * Priority:
- * 1. AI_URL env var (explicit config)
- * 2. host.docker.internal:8001 (Docker container environment)
- * 3. localhost:8001 (bare local dev)
- *
- * Detection uses a quick /health probe with 2s timeout.
- * If AI_URL is set, detection is skipped entirely.
- */
-export async function resolveAiUrl(): Promise<string> {
-  if (CONFIGURED_AI_URL) return CONFIGURED_AI_URL;
+export function resolveAiUrl(): string {
+  const url = process.env.AI_URL;
 
-  for (const url of FALLBACK_URLS) {
-    try {
-      const res = await fetch(`${url}/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(2000),
-      });
-      if (res.ok || res.status < 500) {
-        return url;
-      }
-    } catch {
-      // Not reachable, try next
-    }
+  if (url) return url;
+
+  // AI_URL không được set — chỉ xảy ra khi chạy bare local không có .env.local
+  // Không probe (tránh intermittent 502 khi hot-reload), trả về fallback cứng
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[ai-proxy] FATAL: AI_URL is not set. Set it in Vercel environment variables.');
+  } else {
+    console.warn('[ai-proxy] AI_URL not set — using fallback http://host.docker.internal:8001/api');
   }
 
   return FALLBACK_URLS[0];

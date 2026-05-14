@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveAiUrl } from './route-helpers';
 
 export const maxDuration = 60; // Vercel: allow up to 60s per proxy request
+export const dynamic = 'force-dynamic'; // Always read env vars at runtime
 
 export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
   return proxyRequest(req, params.path, 'GET');
@@ -15,7 +16,7 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
   const path = pathSegments.join('/');
   const search = req.nextUrl.search;
 
-  const aiUrl = await resolveAiUrl();
+  const aiUrl = resolveAiUrl(); // sync — no probe, no await
   const targetUrl = `${aiUrl}/${path}${search}`;
 
   const headers: Record<string, string> = {
