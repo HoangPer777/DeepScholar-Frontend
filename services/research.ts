@@ -42,6 +42,61 @@ export interface DeepResearchResponse {
   review_feedback: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Follow-up chat (memory chatbot)
+// ---------------------------------------------------------------------------
+
+export interface FollowUpResponse {
+  answer: string;
+  citations: Array<{
+    index: number;
+    title: string;
+    url: string;
+    score: number;
+    source_type: string;
+    apa_year?: string;
+  }>;
+  confidence_score: number;
+  review_feedback: string | null;
+  need_clarification: boolean;
+  clarification_question: string | null;
+}
+
+/**
+ * Send a follow-up question using the existing /api/chat/ endpoint.
+ * article_id is null for deep-research mode (no PDF context).
+ */
+export async function sendFollowUp(
+  question: string,
+  sessionId?: string | null,
+): Promise<FollowUpResponse> {
+  const url = typeof window === 'undefined'
+    ? `${process.env.AI_URL || process.env.NEXT_PUBLIC_AI_URL || 'http://localhost:8001/api'}/chat/`
+    : '/api/ai-proxy/chat/';
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, article_id: null, session_id: sessionId ?? null }),
+    });
+  } catch {
+    throw new ResearchError('Cannot reach AI service.', 'network');
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new ResearchError(`AI service error: ${err.detail}`, 'server');
+  }
+
+  return res.json() as Promise<FollowUpResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// Deep research (one-shot, async polling)
+// ---------------------------------------------------------------------------
+
 export async function runDeepResearch(query: string): Promise<DeepResearchResponse> {
   // Step 1: Start the job
   let startRes: Response;
@@ -68,15 +123,13 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
     throw new ResearchError('No task_id returned from AI service', 'server');
   }
 
-  // Step 2: Poll until done — V13: in-flight guard, conservative interval
-  // NOTE: Keep interval at 3s (original) — job takes 3-5 min, aggressive backoff
-  // causes missed results. Adaptive backoff only kicks in after 10+ pending polls.
+  // Step 2: Poll until done
   const pollUrl = `${AI_URL}/research/status/${task_id}`;
-  const maxWaitMs = 8 * 60 * 1000; // 8 minutes (jobs can take 4-5 min with retries)
-  const INITIAL_INTERVAL_MS = 3000;  // keep original 3s — job is long, don't miss result
-  const MAX_INTERVAL_MS = 8000;      // cap at 8s max (not 15s — too slow to catch done)
+  const maxWaitMs = 8 * 60 * 1000;
+  const INITIAL_INTERVAL_MS = 3000;
+  const MAX_INTERVAL_MS = 8000;
   const BACKOFF_MULTIPLIER = 1.15;
-  const BACKOFF_AFTER_N_POLLS = 10;  // only backoff after 10 consecutive pending (30s)
+  const BACKOFF_AFTER_N_POLLS = 10;
 
   let currentInterval = INITIAL_INTERVAL_MS;
   let consecutivePending = 0;
@@ -86,7 +139,6 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
   while (Date.now() - started < maxWaitMs) {
     await new Promise((r) => setTimeout(r, currentInterval));
 
-    // In-flight guard: skip if previous poll hasn't completed
     if (pollInFlight) continue;
 
     pollInFlight = true;
@@ -94,7 +146,6 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
     try {
       pollRes = await fetch(pollUrl);
     } catch {
-      // transient network error, keep polling
       pollInFlight = false;
       continue;
     } finally {
@@ -121,7 +172,6 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
       return data as DeepResearchResponse;
     }
 
-    // status === 'pending' — gentle adaptive backoff only after many polls
     consecutivePending++;
     if (consecutivePending % BACKOFF_AFTER_N_POLLS === 0) {
       currentInterval = Math.min(currentInterval * BACKOFF_MULTIPLIER, MAX_INTERVAL_MS);
