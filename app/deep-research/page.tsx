@@ -13,15 +13,43 @@ import {
   Search,
   SearchIcon,
   Trash2,
+  ArrowUp,
+  Loader2,
+  Sparkles,
+  ExternalLink,
+  AlertCircle,
+  Zap
 } from 'lucide-react';
 import NotificationDropdown from '@/components/NotificationDropdown';
 import ResearchResults from '@/components/deep-research/ResearchResults';
-import { runDeepResearch, type DeepResearchResponse, ResearchError, type ResearchErrorType } from '@/services/research';
+import { runDeepResearch, sendFollowUp, type DeepResearchResponse, type FollowUpResponse, ResearchError, type ResearchErrorType } from '@/services/research';
+
+type ResearchTurn = {
+  kind: 'research';
+  query: string;
+  data: DeepResearchResponse | null;
+  loading: boolean;
+  error: string | null;
+  errorType: ResearchErrorType | null;
+  retryAfter: number | null;
+};
+
+type FollowUpTurn = {
+  kind: 'followup';
+  question: string;
+  data: FollowUpResponse | null;
+  loading: boolean;
+  error: string | null;
+};
+
+type ChatTurn = ResearchTurn | FollowUpTurn;
 
 interface HistoryItem {
   id: string;
   query: string;
   timestamp: number;
+  sessionId?: string | null;
+  turns?: ChatTurn[];
 }
 
 type ResearchState = 'idle' | 'results';
@@ -47,6 +75,7 @@ function groupHistory(items: HistoryItem[]) {
 export default function DeepResearchPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [state, setState] = useState<ResearchState>('idle');
+  const [pageState, setPageState] = useState<'idle' | 'chat'>('idle');
   const [query, setQuery] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
   const [currentQuery, setCurrentQuery] = useState('');
@@ -57,6 +86,32 @@ export default function DeepResearchPage() {
   const [retryAfter, setRetryAfter] = useState<number | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [searchHistory, setSearchHistory] = useState('');
+  
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [followUp, setFollowUp] = useState('');
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
+  
+  const bottomRef = React.useRef<HTMLDivElement>(null);
+  const isAnyLoading = turns.some(t => t.loading) || loading;
+
+  useEffect(() => {
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [turns]);
+
+  // Sync current conversation to localStorage
+  useEffect(() => {
+    if (!activeHistoryId || turns.length === 0) return;
+    setHistory((prev) => {
+      const updated = prev.map((h) => 
+        h.id === activeHistoryId ? { ...h, turns, sessionId } : h
+      );
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }, [turns, sessionId, activeHistoryId]);
 
   // Load history from localStorage
   useEffect(() => {
@@ -67,12 +122,14 @@ export default function DeepResearchPage() {
   }, []);
 
   const saveToHistory = (q: string) => {
-    const newItem: HistoryItem = { id: Date.now().toString(), query: q, timestamp: Date.now() };
+    const id = Date.now().toString();
+    const newItem: HistoryItem = { id, query: q, timestamp: Date.now(), turns: [], sessionId: null };
     setHistory((prev) => {
       const updated = [newItem, ...prev.filter((h) => h.query !== q)].slice(0, 50);
       try { localStorage.setItem(HISTORY_KEY, JSON.stringify(updated)); } catch {}
       return updated;
     });
+    return id;
   };
 
   const deleteHistoryItem = (id: string, e: React.MouseEvent) => {
@@ -92,40 +149,87 @@ export default function DeepResearchPage() {
   const handleStartResearch = async (e: React.FormEvent, overrideQuery?: string) => {
     e.preventDefault();
     const q = (overrideQuery ?? query).trim();
-    if (!q || loading) return; // guard: prevent double submit while job is running
+    if (!q || isAnyLoading) return; // guard: prevent double submit while job is running
 
     setCurrentQuery(q);
     setState('results');
+    setPageState('chat');
     setLoading(true);
     setError(null);
     setData(null);
-    saveToHistory(q);
+    const newId = saveToHistory(q);
+    setActiveHistoryId(newId);
+    
+    // Create new turn
+    const newTurnIndex = turns.length;
+    setTurns((prev) => [...prev, { kind: 'research', query: q, data: null, loading: true, error: null, errorType: null, retryAfter: null }]);
 
     try {
       const result = await runDeepResearch(q);
       setData(result);
+      if (result.session_id) setSessionId(result.session_id);
+      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? { ...t, data: result, loading: false } : t));
     } catch (err: any) {
       setError(err.message || 'Something went wrong');
       setErrorType(err instanceof ResearchError ? err.type : 'server');
       setRetryAfter(err instanceof ResearchError ? err.retryAfter ?? null : null);
+      
+      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? {
+        ...t, loading: false, error: err.message || 'Something went wrong',
+        errorType: err instanceof ResearchError ? err.type : 'server',
+        retryAfter: err instanceof ResearchError ? err.retryAfter ?? null : null
+      } : t));
     } finally {
       setLoading(false);
     }
   };
 
+  const handleFollowUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = followUp.trim();
+    if (!q || isAnyLoading) return;
+
+    setFollowUp('');
+    const newTurnIndex = turns.length;
+    setTurns((prev) => [...prev, { kind: 'followup', question: q, data: null, loading: true, error: null }]);
+
+    try {
+      const res = await sendFollowUp(q, sessionId);
+      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? { ...t, data: res, loading: false } : t));
+    } catch (err: any) {
+      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? { ...t, loading: false, error: err.message || 'Something went wrong' } : t));
+    }
+  };
+
   const loadFromHistory = (item: HistoryItem) => {
     setQuery(item.query);
-    const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
-    handleStartResearch(fakeEvent, item.query);
+    setCurrentQuery(item.query);
+    if (item.turns && item.turns.length > 0) {
+      setTurns(item.turns);
+      setSessionId(item.sessionId ?? null);
+      setActiveHistoryId(item.id);
+      setState('results');
+      setPageState('chat');
+    } else {
+      setState('idle');
+      setPageState('idle');
+      setTurns([]);
+      setSessionId(null);
+      setActiveHistoryId(item.id);
+    }
   };
 
   const resetResearch = () => {
     setState('idle');
+    setPageState('idle');
     setQuery('');
     setData(null);
     setError(null);
     setErrorType(null);
     setRetryAfter(null);
+    setTurns([]);
+    setSessionId(null);
+    setActiveHistoryId(null);
   };
 
   const filteredHistory = history.filter((h) =>
@@ -310,8 +414,8 @@ export default function DeepResearchPage() {
           </header>
 
           {/* Page content */}
-          <div className={state === 'results' ? '' : 'flex items-center justify-center min-h-[calc(100vh-57px)]'}>
-            {state === 'idle' && (
+          <div className={pageState === 'chat' ? 'flex flex-col flex-1 min-h-[calc(100vh-57px)] relative' : 'flex items-center justify-center min-h-[calc(100vh-57px)]'}>
+            {pageState === 'idle' && (
               <div className="w-full max-w-3xl mx-auto px-6 py-16 space-y-12 text-center animate-in fade-in slide-in-from-bottom-8 duration-700">
                 <div className="space-y-4">
                   <h2 className="text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-[1.1]">
@@ -344,7 +448,7 @@ export default function DeepResearchPage() {
                       />
                       <button
                         type="submit"
-                        disabled={!query.trim()}
+                        disabled={!query.trim() || isAnyLoading}
                         className="absolute right-3 bg-[#135bec] text-white px-7 py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 hover:bg-blue-700 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
                       >
                         Start Deep Research
@@ -374,29 +478,46 @@ export default function DeepResearchPage() {
               </div>
             )}
 
-            {state === 'results' && (
-              <ResearchResults
-                query={currentQuery}
-                data={data}
-                loading={loading}
-                error={error}
-                errorType={errorType}
-                retryAfter={retryAfter}
-              />
+            {pageState === 'chat' && (
+              <div className="flex flex-col flex-1 h-full w-full">
+                <div className="flex-1 overflow-y-auto pb-36">
+                  {turns.map((turn, idx) => (
+                    <TurnBlock key={idx} turn={turn} />
+                  ))}
+                  <div ref={bottomRef} />
+                </div>
+                
+                {/* Sticky input */}
+                <div className="absolute bottom-0 left-0 right-0 z-10 bg-white/90 backdrop-blur-md border-t border-slate-100 p-4 pb-8">
+                  <form onSubmit={handleFollowUp} className="max-w-3xl mx-auto relative bg-white rounded-[24px] shadow-sm border border-slate-200 flex items-end overflow-hidden p-2 focus-within:border-[#135bec]/50 focus-within:ring-4 focus-within:ring-[#135bec]/10 transition-all">
+                    <textarea
+                      value={followUp}
+                      onChange={(e) => setFollowUp(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleFollowUp(e as any);
+                        }
+                      }}
+                      placeholder="Ask a follow-up question… (Enter to send)"
+                      className="w-full resize-none bg-transparent border-none outline-none focus:ring-0 placeholder:text-slate-400 py-3 px-4 text-sm max-h-[150px]"
+                      style={{ fieldSizing: 'content' } as any}
+                      rows={1}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isAnyLoading || !followUp.trim()}
+                      className="shrink-0 w-10 h-10 flex items-center justify-center bg-[#135bec] text-white rounded-[16px] disabled:opacity-50 disabled:bg-slate-300 transition-colors mb-1 mr-1"
+                    >
+                      {isAnyLoading ? <Loader2 size={18} className="animate-spin" /> : <ArrowUp size={18} />}
+                    </button>
+                  </form>
+                </div>
+              </div>
             )}
           </div>
         </section>
       </div>
-
-      {state === 'results' && (
-        <button
-          onClick={resetResearch}
-          className="fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full bg-slate-900 text-white font-bold text-sm shadow-2xl hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-        >
-          <Search size={16} />
-          New Research
-        </button>
-      )}
     </main>
   );
 }
@@ -430,5 +551,93 @@ function HistoryRow({
         </span>
       )}
     </button>
+  );
+}
+
+function TurnBlock({ turn }: { turn: ChatTurn }) {
+  if (turn.kind === 'research') {
+    return (
+      <ResearchResults
+        query={turn.query}
+        data={turn.data}
+        loading={turn.loading}
+        error={turn.error}
+        errorType={turn.errorType}
+        retryAfter={turn.retryAfter}
+      />
+    );
+  } else {
+    return <FollowUpBlock turn={turn} />;
+  }
+}
+
+function FollowUpBlock({ turn }: { turn: FollowUpTurn }) {
+  // We can reuse parts of ResearchResults styling here
+  return (
+    <div className="bg-white border-t border-slate-100">
+      <div className="max-w-[900px] mx-auto p-12 lg:px-20 lg:py-12 space-y-8">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+            <span className="font-bold text-slate-600">You</span>
+          </div>
+          <div className="pt-2 text-lg font-semibold text-slate-800">
+            {turn.question}
+          </div>
+        </div>
+        
+        <div className="pl-14 space-y-6">
+          {turn.loading && (
+            <div className="flex items-center gap-3 text-slate-400">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-sm">Thinking...</span>
+            </div>
+          )}
+          
+          {turn.error && (
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 text-red-600">
+              <AlertCircle size={18} className="shrink-0 mt-0.5" />
+              <p className="text-sm">{turn.error}</p>
+            </div>
+          )}
+          
+          {turn.data && (
+            <>
+              <div className="prose prose-sm md:prose-base prose-slate max-w-none prose-a:text-[#135bec] hover:prose-a:underline">
+                {/* Normally we'd use MarkdownContent, for simplicity we just render strings for now */}
+                {turn.data.answer.split('\n').map((line, i) => {
+                  if (!line.trim()) return <br key={i} />;
+                  return <p key={i} className="mb-2 leading-relaxed text-slate-700">{line}</p>;
+                })}
+              </div>
+              
+              {turn.data.citations && turn.data.citations.length > 0 && (
+                <div className="border-t border-slate-100 pt-6 mt-6 space-y-3">
+                  <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
+                    Sources
+                  </h3>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {turn.data.citations.map((s) => (
+                      <a
+                        key={s.index}
+                        href={s.url || '#'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 hover:border-[#135bec]/20 hover:bg-blue-50/40 transition-all group"
+                      >
+                        <span className="text-[10px] font-black text-[#135bec]/50 mt-0.5 shrink-0 w-6">[{s.index}]</span>
+                        <span className="flex-1 text-[12px] font-medium text-slate-600 group-hover:text-slate-900 leading-snug line-clamp-2">{s.title}</span>
+                        {s.url && (
+                          <ExternalLink size={12} className="shrink-0 mt-0.5 text-slate-300 group-hover:text-[#135bec] transition-colors" />
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

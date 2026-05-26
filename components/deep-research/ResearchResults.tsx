@@ -124,7 +124,7 @@ export default function ResearchResults({
   const abstract = data ? extractAbstract(data.answer) : '';
 
   return (
-    <div className="min-h-[calc(100vh-60px)] bg-white border-t border-slate-100">
+    <div className="bg-white border-t border-slate-100">
       <main className="w-full bg-white">
         <div className="max-w-[900px] mx-auto p-12 lg:p-20 space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
@@ -211,7 +211,7 @@ export default function ResearchResults({
 
               {/* Sources at bottom */}
               {data.sources && data.sources.length > 0 && (
-                <div className="border-t border-slate-100 pt-10 pb-20 space-y-4">
+                <div className="border-t border-slate-100 pt-10 pb-6 space-y-4">
                   <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
                     Sources ({data.sources.length})
                   </h3>

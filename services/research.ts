@@ -27,6 +27,7 @@ export interface ResearchSource {
 }
 
 export interface DeepResearchResponse {
+  session_id?: string;
   answer: string;
   sources: ResearchSource[];
   planner_decision: {
@@ -87,7 +88,9 @@ export async function sendFollowUp(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new ResearchError(`AI service error: ${err.detail}`, 'server');
+    let detail = err.detail || res.statusText;
+    if (typeof detail === 'object') detail = JSON.stringify(detail);
+    throw new ResearchError(`AI service error: ${detail}`, 'server');
   }
 
   return res.json() as Promise<FollowUpResponse>;
@@ -125,7 +128,7 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
 
   // Step 2: Poll until done
   const pollUrl = `${AI_URL}/research/status/${task_id}`;
-  const maxWaitMs = 8 * 60 * 1000;
+  const maxWaitMs = 20 * 60 * 1000;
   const INITIAL_INTERVAL_MS = 3000;
   const MAX_INTERVAL_MS = 8000;
   const BACKOFF_MULTIPLIER = 1.15;
@@ -179,7 +182,7 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
   }
 
   throw new ResearchError(
-    'Research timed out after 8 minutes. The query may be too complex — please try a more specific topic.',
+    'Research timed out after 20 minutes. The query may be too complex — please try a more specific topic.',
     'network'
   );
 }
