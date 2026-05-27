@@ -3,6 +3,13 @@ const AI_URL = typeof window === 'undefined'
   ? (process.env.AI_URL || process.env.NEXT_PUBLIC_AI_URL || 'http://localhost:8001/api')
   : '/api/ai-proxy';
 
+// For polling: if NEXT_PUBLIC_AI_URL is set (e.g. production EC2 URL), poll directly
+// from the browser to bypass the Vercel serverless proxy timeout.
+// In local Docker dev, NEXT_PUBLIC_AI_URL is not set so we fall back to the proxy.
+const POLL_URL = typeof window !== 'undefined' && process.env.NEXT_PUBLIC_AI_URL
+  ? process.env.NEXT_PUBLIC_AI_URL
+  : AI_URL;
+
 export type ResearchErrorType = 'rate_limit' | 'network' | 'server';
 
 export class ResearchError extends Error {
@@ -44,7 +51,7 @@ export interface DeepResearchResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Follow-up chat (memory chatbot)
+// Follow-up chat (async polling — same pattern as deep research)
 // ---------------------------------------------------------------------------
 
 export interface FollowUpResponse {
@@ -64,20 +71,22 @@ export interface FollowUpResponse {
 }
 
 /**
- * Send a follow-up question using the existing /api/chat/ endpoint.
- * article_id is null for deep-research mode (no PDF context).
+ * Send a follow-up question using async job pattern.
+ * POST /chat/start → get task_id → poll /chat/status/{task_id} until done.
+ * This avoids Vercel serverless proxy timeout (60s) for long LLM workflows.
  */
 export async function sendFollowUp(
   question: string,
   sessionId?: string | null,
 ): Promise<FollowUpResponse> {
-  const url = typeof window === 'undefined'
-    ? `${process.env.AI_URL || process.env.NEXT_PUBLIC_AI_URL || 'http://localhost:8001/api'}/chat/`
-    : '/api/ai-proxy/chat/';
+  const baseUrl = typeof window === 'undefined'
+    ? `${process.env.AI_URL || process.env.NEXT_PUBLIC_AI_URL || 'http://localhost:8001/api'}`
+    : '/api/ai-proxy';
 
-  let res: Response;
+  // Step 1: Start the async chat job
+  let startRes: Response;
   try {
-    res = await fetch(url, {
+    startRes = await fetch(`${baseUrl}/chat/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question, article_id: null, session_id: sessionId ?? null }),
@@ -86,14 +95,59 @@ export async function sendFollowUp(
     throw new ResearchError('Cannot reach AI service.', 'network');
   }
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    let detail = err.detail || res.statusText;
+  if (!startRes.ok) {
+    const err = await startRes.json().catch(() => ({ detail: startRes.statusText }));
+    let detail = err.detail || startRes.statusText;
     if (typeof detail === 'object') detail = JSON.stringify(detail);
     throw new ResearchError(`AI service error: ${detail}`, 'server');
   }
 
-  return res.json() as Promise<FollowUpResponse>;
+  const { task_id } = await startRes.json();
+  if (!task_id) {
+    throw new ResearchError('No task_id returned from chat service', 'server');
+  }
+
+  // Step 2: Poll until done — use POLL_URL to bypass Vercel proxy for polling
+  const pollBase = typeof window !== 'undefined' && process.env.NEXT_PUBLIC_AI_URL
+    ? process.env.NEXT_PUBLIC_AI_URL
+    : baseUrl;
+  const pollUrl = `${pollBase}/chat/status/${task_id}`;
+
+  const maxWaitMs = 10 * 60 * 1000; // 10 min max for follow-up
+  const POLL_INTERVAL_MS = 2000;
+  const started = Date.now();
+
+  while (Date.now() - started < maxWaitMs) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+
+    let pollRes: Response;
+    try {
+      pollRes = await fetch(pollUrl);
+    } catch {
+      continue; // network blip — retry
+    }
+
+    if (pollRes.status === 404) {
+      throw new ResearchError('Chat task not found — server may have restarted.', 'server');
+    }
+
+    if (!pollRes.ok) {
+      const err = await pollRes.json().catch(() => ({ detail: pollRes.statusText }));
+      const detail: string = err.detail || pollRes.statusText;
+      throw new ResearchError(`AI service error: ${detail}`, 'server');
+    }
+
+    const data = await pollRes.json();
+    if (data.status === 'done') {
+      return data as FollowUpResponse;
+    }
+    // status === 'pending' → keep polling
+  }
+
+  throw new ResearchError(
+    'Follow-up timed out after 10 minutes. Please try again.',
+    'network'
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -127,7 +181,9 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
   }
 
   // Step 2: Poll until done
-  const pollUrl = `${AI_URL}/research/status/${task_id}`;
+  // Use POLL_URL (direct to AI service if public URL available) to avoid
+  // routing every poll through the Vercel serverless proxy (60s maxDuration limit).
+  const pollUrl = `${POLL_URL}/research/status/${task_id}`;
   const maxWaitMs = 20 * 60 * 1000;
   const INITIAL_INTERVAL_MS = 3000;
   const MAX_INTERVAL_MS = 8000;

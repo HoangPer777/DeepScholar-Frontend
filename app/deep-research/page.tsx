@@ -93,7 +93,12 @@ export default function DeepResearchPage() {
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   
   const bottomRef = React.useRef<HTMLDivElement>(null);
-  const isAnyLoading = turns.some(t => t.loading) || loading;
+  // isAnyLoading: true only when a follow-up turn is in-flight.
+  // Research turns have their own loading state shown inside TurnBlock.
+  // We must NOT disable the follow-up input while research is loading —
+  // the user should be able to type their next question while waiting.
+  const isFollowUpLoading = turns.some(t => t.kind === 'followup' && t.loading);
+  const isAnyLoading = isFollowUpLoading || loading;
 
   useEffect(() => {
     if (bottomRef.current) {
@@ -149,7 +154,7 @@ export default function DeepResearchPage() {
   const handleStartResearch = async (e: React.FormEvent, overrideQuery?: string) => {
     e.preventDefault();
     const q = (overrideQuery ?? query).trim();
-    if (!q || isAnyLoading) return; // guard: prevent double submit while job is running
+    if (!q || loading) return; // guard: prevent double submit while research job is running
 
     setCurrentQuery(q);
     setState('results');
@@ -168,7 +173,7 @@ export default function DeepResearchPage() {
       const result = await runDeepResearch(q);
       setData(result);
       if (result.session_id) setSessionId(result.session_id);
-      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? { ...t, data: result, loading: false } : t));
+      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? { ...t, data: result, loading: false } as ResearchTurn : t));
     } catch (err: any) {
       setError(err.message || 'Something went wrong');
       setErrorType(err instanceof ResearchError ? err.type : 'server');
@@ -195,7 +200,7 @@ export default function DeepResearchPage() {
 
     try {
       const res = await sendFollowUp(q, sessionId);
-      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? { ...t, data: res, loading: false } : t));
+      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? { ...t, data: res, loading: false } as FollowUpTurn : t));
     } catch (err: any) {
       setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? { ...t, loading: false, error: err.message || 'Something went wrong' } : t));
     }
@@ -448,7 +453,7 @@ export default function DeepResearchPage() {
                       />
                       <button
                         type="submit"
-                        disabled={!query.trim() || isAnyLoading}
+                        disabled={!query.trim() || loading}
                         className="absolute right-3 bg-[#135bec] text-white px-7 py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-blue-500/25 hover:bg-blue-700 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
                       >
                         Start Deep Research
