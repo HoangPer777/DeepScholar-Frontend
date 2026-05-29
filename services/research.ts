@@ -68,6 +68,7 @@ export interface FollowUpResponse {
   review_feedback: string | null;
   need_clarification: boolean;
   clarification_question: string | null;
+  is_fast_chat?: boolean;
 }
 
 /**
@@ -114,11 +115,11 @@ export async function sendFollowUp(
   const pollUrl = `${pollBase}/chat/status/${task_id}`;
 
   const maxWaitMs = 10 * 60 * 1000; // 10 min max for follow-up
-  const POLL_INTERVAL_MS = 2000;
+  const FAST_CHAT_POLL_INTERVAL_MS = 1000;
   const started = Date.now();
 
   while (Date.now() - started < maxWaitMs) {
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    await new Promise((r) => setTimeout(r, FAST_CHAT_POLL_INTERVAL_MS));
 
     let pollRes: Response;
     try {

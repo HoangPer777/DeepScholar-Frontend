@@ -607,6 +607,13 @@ function FollowUpBlock({ turn }: { turn: FollowUpTurn }) {
           
           {turn.data && (
             <>
+              {/* Fast Reply badge — shown when response came from FastChatAgent */}
+              {turn.data.is_fast_chat && (
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 w-fit">
+                  <Zap size={12} />
+                  Fast Reply
+                </div>
+              )}
               <div className="prose prose-sm md:prose-base prose-slate max-w-none prose-a:text-[#135bec] hover:prose-a:underline">
                 {/* Normally we'd use MarkdownContent, for simplicity we just render strings for now */}
                 {turn.data.answer.split('\n').map((line, i) => {
