@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import type { Route } from 'next';
 import { api } from '@/lib/api';
+import AuthGuard from '@/components/auth/AuthGuard';
+import AppSidebar from '@/components/layout/AppSidebar';
 import {
   Atom,
   Bell,
@@ -114,9 +116,11 @@ export default function ProfilePage() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[#f6f6f8] text-slate-900">
+    <AuthGuard><main className="min-h-screen bg-[#f6f6f8] text-slate-900">
       <div className="mx-auto flex w-full max-w-[1700px]">
+        <AppSidebar />
         <aside
+          style={{ display: 'none' }}
           className={`sticky top-0 z-20 hidden h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 lg:flex lg:flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}
         >
           <button
@@ -509,6 +513,6 @@ export default function ProfilePage() {
           </div>
         </section>
       </div>
-    </main>
+    </main></AuthGuard>
   );
 }

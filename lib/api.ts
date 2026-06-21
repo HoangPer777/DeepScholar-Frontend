@@ -31,7 +31,11 @@ export const fetchWithAuth = async (endpoint: string, options: RequestInit = {})
       if (typeof window !== 'undefined') {
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        window.location.reload();
+        localStorage.removeItem('user');
+        const current = `${window.location.pathname}${window.location.search}`;
+        if (!window.location.pathname.startsWith('/login')) {
+          window.location.assign(`/login?next=${encodeURIComponent(current)}`);
+        }
       }
     }
     

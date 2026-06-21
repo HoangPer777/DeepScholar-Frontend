@@ -1,6 +1,7 @@
 'use client';
 
 import { api } from '@/lib/api';
+import AppSidebar from '@/components/layout/AppSidebar';
 import { useRouter } from 'next/navigation';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
@@ -325,8 +326,10 @@ export default function UploadPage() {
 
     return (
         <main className="min-h-screen bg-[#f6f6f8] text-slate-900 flex overflow-hidden">
+            <AppSidebar />
             {/* ── Sidebar ──────────────────────────────────────────────── */}
             <aside
+                style={{ display: 'none' }}
                 className={`sticky top-0 z-20 h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}
             >
                 <button
