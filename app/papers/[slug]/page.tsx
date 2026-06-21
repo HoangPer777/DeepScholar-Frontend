@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { Route } from 'next';
+import AppSidebar from '@/components/layout/AppSidebar';
 import {
   AlertCircle,
   Atom,
@@ -236,7 +237,9 @@ export default function PaperDetailPage() {
   return (
     <main className="min-h-screen bg-[#f6f6f8] text-slate-900">
       <div className="mx-auto flex w-full max-w-[1700px]">
+        <AppSidebar />
         <aside
+          style={{ display: 'none' }}
           className={`sticky top-0 z-20 hidden h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 lg:flex lg:flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}
         >
           <button

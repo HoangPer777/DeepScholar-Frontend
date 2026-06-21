@@ -6,6 +6,9 @@ import type { Route } from 'next';
 import { api } from '@/lib/api';
 import { interactionsService, isLoggedIn } from '@/services/interactions';
 import NotificationDropdown from '@/components/NotificationDropdown';
+import AppSidebar from '@/components/layout/AppSidebar';
+import { rankingService } from '@/services/ranking';
+import type { RankedAuthor } from '@/types/ranking';
 import {
   Atom,
   BadgeCheck,
@@ -39,17 +42,15 @@ const navItems = [
   { label: 'Collaborations', active: false, icon: UserRound, href: '/collaborations' },
 ];
 
-const researchers = [
-  { rank: 1, name: 'Dr. Julian Voss', institution: 'Stanford University', impact: '2.4k' },
-  { rank: 2, name: 'Sarah Chen, PhD', institution: 'MIT Media Lab', impact: '2.1k' },
-  { rank: 3, name: 'Prof. Marcus Thorne', institution: 'Oxford Physics', impact: '1.9k' },
-];
-
 export default function HomePage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [papers, setPapers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [articleCount, setArticleCount] = useState(0);
+  const [researchers, setResearchers] = useState<RankedAuthor[]>([]);
+  const [rankingLoading, setRankingLoading] = useState(true);
 
   // Per-article interaction state: { [articleId]: { liked, like_count, bookmarked, bookmark_count, share_count, likeLoading, bookmarkLoading, shareLoading } }
   const [interactions, setInteractions] = useState<Record<number, {
@@ -64,10 +65,14 @@ export default function HomePage() {
   }>>({});
 
   useEffect(() => {
+    const controller = new AbortController();
     async function fetchArticles() {
       try {
-        const data = await api.get('/articles/');
+        setLoading(true);
+        setErrorMsg(null);
+        const data = await api.get(`/articles/?page=${currentPage}&page_size=10`, { signal: controller.signal });
         const list = data.results ?? (Array.isArray(data) ? data : []);
+        setArticleCount(data.count ?? list.length);
         setPapers(list);
         // Initialise interaction state from API counts
         const init: typeof interactions = {};
@@ -83,16 +88,33 @@ export default function HomePage() {
             shareLoading: false,
           };
         });
-        setInteractions(init);
+        setInteractions((current) => ({ ...init, ...current }));
       } catch (error: any) {
+        if (error?.name === 'AbortError') return;
         console.error('Failed to fetch articles:', error);
         setErrorMsg(error.message || String(error));
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     fetchArticles();
+    return () => controller.abort();
+  }, [currentPage]);
+
+  useEffect(() => {
+    const readPage = () => setCurrentPage(Math.max(Number(new URLSearchParams(window.location.search).get('page')) || 1, 1));
+    readPage();
+    window.addEventListener('popstate', readPage);
+    rankingService.top().then((data) => setResearchers(data.results)).catch(() => setResearchers([])).finally(() => setRankingLoading(false));
+    return () => window.removeEventListener('popstate', readPage);
   }, []);
+
+  const changePage = (page: number) => {
+    const safePage = Math.max(page, 1);
+    window.history.pushState({}, '', safePage === 1 ? '/' : `/?page=${safePage}`);
+    setCurrentPage(safePage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleLike = useCallback(async (articleId: number) => {
     if (!isLoggedIn()) {
@@ -184,7 +206,9 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#f6f6f8] text-slate-900">
       <div className="mx-auto flex w-full max-w-[1700px]">
+        <AppSidebar />
         <aside
+          style={{ display: 'none' }}
           className={`sticky top-0 z-20 hidden h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 lg:flex lg:flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'
             }`}
         >
@@ -464,6 +488,7 @@ export default function HomePage() {
                   );
                 })}
               </div>
+              {articleCount > 10 && <div className="flex items-center justify-center gap-4 pt-2"><button onClick={() => changePage(currentPage - 1)} disabled={currentPage <= 1 || loading} className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold disabled:opacity-40">Previous</button><span className="text-sm text-slate-500">Page {currentPage} of {Math.ceil(articleCount / 10)}</span><button onClick={() => changePage(currentPage + 1)} disabled={currentPage >= Math.ceil(articleCount / 10) || loading} className="rounded-lg border bg-white px-4 py-2 text-sm font-semibold disabled:opacity-40">Next</button></div>}
             </div>
 
             <aside className="w-full shrink-0 2xl:w-80">
@@ -475,8 +500,8 @@ export default function HomePage() {
                   </div>
 
                   <div className="divide-y divide-slate-100">
-                    {researchers.map((item) => (
-                      <div key={item.name} className="flex cursor-pointer items-center gap-4 p-4 transition-colors hover:bg-slate-50">
+                    {rankingLoading ? <div className="p-6 text-center text-sm text-slate-400">Loading rankings...</div> : researchers.length === 0 ? <div className="p-6 text-center text-sm text-slate-400">No ranking data yet.</div> : researchers.map((item) => (
+                      <Link href={`/authors/${item.id}`} key={item.id} className="flex cursor-pointer items-center gap-4 p-4 transition-colors hover:bg-slate-50">
                         <div className="relative">
                           <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-slate-500">
                             <UserRound size={17} />
@@ -487,20 +512,20 @@ export default function HomePage() {
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <h4 className="truncate text-sm font-bold">{item.name}</h4>
-                          <p className="truncate text-[11px] text-slate-500">{item.institution}</p>
+                          <h4 className="truncate text-sm font-bold">{item.full_name}</h4>
+                          <p className="truncate text-[11px] text-slate-500">{item.affiliation || item.author_code}</p>
                         </div>
 
                         <div className="text-right">
-                          <p className="text-sm font-bold text-[#135bec]">{item.impact}</p>
+                          <p className="text-sm font-bold text-[#135bec]">{item.total_score.toLocaleString()}</p>
                           <p className="text-[10px] font-medium uppercase text-slate-400">Impact</p>
                         </div>
-                      </div>
+                      </Link>
                     ))}
                   </div>
 
                   <div className="bg-slate-50 p-4">
-                    <button className="w-full text-center text-xs font-bold text-[#135bec] hover:underline">View Full Leaderboard</button>
+                    <Link href="/rankings" className="block w-full text-center text-xs font-bold text-[#135bec] hover:underline">View Full Leaderboard</Link>
                   </div>
                 </div>
 

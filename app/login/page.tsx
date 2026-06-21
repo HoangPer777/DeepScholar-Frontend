@@ -20,12 +20,18 @@ export default function LoginPage() {
     password: '',
   });
 
+  const redirectAfterLogin = () => {
+    const value = new URLSearchParams(window.location.search).get('next');
+    const safeNext = value && value.startsWith('/') && !value.startsWith('//') ? value : '/';
+    router.push(safeNext as Route);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
       await authService.login({ email: formData.email, password: formData.password });
-      router.push('/' as Route); // Redirect to home/dashboard
+      redirectAfterLogin();
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check your credentials.');
     }
@@ -35,7 +41,7 @@ export default function LoginPage() {
     if (credentialResponse.credential) {
       try {
         await authService.googleLogin(credentialResponse.credential);
-        router.push('/' as Route);
+        redirectAfterLogin();
       } catch (err: any) {
         setError(err.message || 'Google login failed.');
       }
@@ -46,7 +52,7 @@ export default function LoginPage() {
     if (response.accessToken) {
       try {
         await authService.facebookLogin(response.accessToken);
-        router.push('/' as Route);
+        redirectAfterLogin();
       } catch (err: any) {
         setError(err.message || 'Facebook login failed.');
       }
