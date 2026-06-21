@@ -2,6 +2,7 @@
 
 import { api } from '@/lib/api';
 import AppSidebar from '@/components/layout/AppSidebar';
+import AuthorGuard from '@/components/auth/AuthorGuard';
 import { useRouter } from 'next/navigation';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
@@ -55,7 +56,7 @@ interface ArticleData {
 const POLLING_INTERVAL_MS = 5000;  // Poll every 5 seconds
 const POLLING_MAX_ATTEMPTS = 24;   // Max 2 minutes of polling
 
-export default function UploadPage() {
+function UploadPageContent() {
     const router = useRouter();
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [file, setFile] = useState<File | null>(null);
@@ -64,7 +65,6 @@ export default function UploadPage() {
     const [statusMsg, setStatusMsg] = useState('');
     const [article, setArticle] = useState<ArticleData | null>(null);
     const [errorMsg, setErrorMsg] = useState('');
-    const [isCheckingAuth, setIsCheckingAuth] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [editedArticle, setEditedArticle] = useState<Partial<ArticleData>>({});
     const [isSaving, setIsSaving] = useState(false);
@@ -77,15 +77,6 @@ export default function UploadPage() {
 
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingAttemptsRef = useRef(0);
-
-    useEffect(() => {
-        const token = localStorage.getItem('access_token');
-        if (!token) {
-            router.push('/login');
-        } else {
-            setIsCheckingAuth(false);
-        }
-    }, [router]);
 
     // Clean up polling interval on unmount
     useEffect(() => {
@@ -315,14 +306,6 @@ export default function UploadPage() {
     const isActive = (s: UploadStep) =>
         ['processing', 'polling', 'done'].includes(step) && s !== 'uploading'
             ? true : false;
-
-    if (isCheckingAuth) {
-        return (
-            <div className="min-h-screen bg-[#f6f6f8] flex items-center justify-center">
-                <Loader2 className="animate-spin text-[#2513ec]" size={40} />
-            </div>
-        );
-    }
 
     return (
         <main className="min-h-screen bg-[#f6f6f8] text-slate-900 flex overflow-hidden">
@@ -813,4 +796,8 @@ export default function UploadPage() {
             </section>
         </main>
     );
+}
+
+export default function UploadPage() {
+    return <AuthorGuard><UploadPageContent /></AuthorGuard>;
 }

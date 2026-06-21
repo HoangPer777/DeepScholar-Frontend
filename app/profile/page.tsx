@@ -329,11 +329,30 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
+                {user.role !== 'author' && (
+                  <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-6 shadow-sm">
+                    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                      <div>
+                        <h3 className="text-xl font-black text-slate-900">Want to publish your research?</h3>
+                        <p className="mt-2 text-sm text-slate-600">Create an author profile to upload papers and manage your publications.</p>
+                      </div>
+                      <Link href={'/profile/become-author?next=/upload' as Route} className="shrink-0 rounded-xl bg-[#135bec] px-5 py-3 text-center text-sm font-bold text-white hover:bg-blue-700">
+                        Become an author
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="space-y-4">
                 {activeTab === 'my-articles' && (
                   <>
-                    {myArticles.length === 0 ? (
+                    {user.role !== 'author' ? (
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-8 text-center">
+                        <p className="font-bold text-slate-800">Create an author profile to publish your first paper.</p>
+                        <Link href={'/profile/become-author?next=/upload' as Route} className="mt-4 inline-block rounded-lg bg-[#135bec] px-4 py-2 text-sm font-bold text-white">Become an author</Link>
+                      </div>
+                    ) : myArticles.length === 0 ? (
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-8 text-center">
                         <p className="text-slate-500">No articles published yet</p>
                       </div>
@@ -474,7 +493,7 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:sticky xl:top-24">
+              {user.role === 'author' && <aside className="h-fit rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:sticky xl:top-24">
                 <div className="mb-5 flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-slate-700">
                   <Info size={14} className="text-[#135bec]" />
                   Author Details
@@ -506,7 +525,7 @@ export default function ProfilePage() {
                     <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Followers</p>
                   </div>
                 </div>
-              </aside>
+              </aside>}
             </div>
               </>
             )}

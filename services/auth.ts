@@ -1,12 +1,18 @@
 import { api } from '../lib/api';
+import type { BecomeAuthorPayload, BecomeAuthorResponse } from '../types/auth';
+
+const storeSession = (response: { access?: string; refresh?: string; user?: unknown }) => {
+    if (!response.access) return;
+    localStorage.setItem('access_token', response.access);
+    if (response.refresh) localStorage.setItem('refresh_token', response.refresh);
+    if (response.user) localStorage.setItem('user', JSON.stringify(response.user));
+};
 
 export const authService = {
     login: async (credentials: any) => {
         const response = await api.post('/auth/login/', credentials);
         if (response.access) {
-            localStorage.setItem('access_token', response.access);
-            localStorage.setItem('refresh_token', response.refresh);
-            localStorage.setItem('user', JSON.stringify(response.user));
+            storeSession(response);
         }
         return response;
     },
@@ -19,9 +25,7 @@ export const authService = {
     googleLogin: async (id_token: string) => {
         const response = await api.post('/auth/google/', { id_token });
         if (response.access) {
-            localStorage.setItem('access_token', response.access);
-            localStorage.setItem('refresh_token', response.refresh);
-            localStorage.setItem('user', JSON.stringify(response.user));
+            storeSession(response);
         }
         return response;
     },
@@ -29,9 +33,7 @@ export const authService = {
     facebookLogin: async (access_token: string) => {
         const response = await api.post('/auth/facebook/', { access_token });
         if (response.access) {
-            localStorage.setItem('access_token', response.access);
-            localStorage.setItem('refresh_token', response.refresh);
-            localStorage.setItem('user', JSON.stringify(response.user));
+            storeSession(response);
         }
         return response;
     },
@@ -43,6 +45,12 @@ export const authService = {
 
     resetPassword: async (data: any) => {
         const response = await api.post('/auth/password-reset-confirm/', data);
+        return response;
+    },
+
+    becomeAuthor: async (payload: BecomeAuthorPayload): Promise<BecomeAuthorResponse> => {
+        const response = await api.post('/auth/become-author/', payload) as BecomeAuthorResponse;
+        storeSession(response);
         return response;
     },
 
