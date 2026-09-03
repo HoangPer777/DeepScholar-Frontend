@@ -54,7 +54,7 @@ interface ArticleData {
 }
 
 const POLLING_INTERVAL_MS = 5000;  // Poll every 5 seconds
-const POLLING_MAX_ATTEMPTS = 24;   // Max 2 minutes of polling
+const POLLING_MAX_ATTEMPTS = 120;  // Max 10 minutes of polling
 
 function UploadPageContent() {
     const router = useRouter();
@@ -77,6 +77,7 @@ function UploadPageContent() {
 
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingAttemptsRef = useRef(0);
+    const pollingInFlightRef = useRef(false);
 
     // Clean up polling interval on unmount
     useEffect(() => {
@@ -90,6 +91,7 @@ function UploadPageContent() {
             clearInterval(pollingRef.current);
             pollingRef.current = null;
         }
+        pollingInFlightRef.current = false;
     };
 
     /**
@@ -102,17 +104,20 @@ function UploadPageContent() {
     const startPolling = (slug: string) => {
         pollingAttemptsRef.current = 0;
         setStep('polling');
-        setStatusMsg('Waiting for AI extraction to complete…');
+        setStatusMsg('Waiting for AI extraction to complete...');
 
-        pollingRef.current = setInterval(async () => {
+        const pollOnce = async () => {
+            if (pollingInFlightRef.current) return;
+
+            pollingInFlightRef.current = true;
             pollingAttemptsRef.current += 1;
 
             try {
                 const data: ArticleData = await api.get(`/articles/${slug}/`);
-
-                const extractionDone =
-                    data.content && data.content.length > 100 &&
-                    !data.title.startsWith('Pending');
+                const title = typeof data?.title === 'string' ? data.title.trim() : '';
+                const content = typeof data?.content === 'string' ? data.content.trim() : '';
+                const hasPendingTitle = /^pending\b/i.test(title);
+                const extractionDone = title.length > 0 && content.length > 100 && !hasPendingTitle;
 
                 if (extractionDone) {
                     stopPolling();
@@ -123,16 +128,22 @@ function UploadPageContent() {
                     return;
                 }
             } catch {
-                // silently ignore response errors during polling
+                // Ignore temporary response errors and continue polling.
+            } finally {
+                pollingInFlightRef.current = false;
             }
 
-            // Timeout after max attempts
             if (pollingAttemptsRef.current >= POLLING_MAX_ATTEMPTS) {
                 stopPolling();
-                setStep('done');
-                setStatusMsg('AI processing may still be running in the background.');
-                setProgress(100);
+                setStep('error');
+                setErrorMsg('AI extraction is still running. Please try checking again shortly.');
+                setStatusMsg('Extraction is taking longer than expected.');
             }
+        };
+
+        void pollOnce();
+        pollingRef.current = setInterval(() => {
+            void pollOnce();
         }, POLLING_INTERVAL_MS);
     };
 
@@ -476,14 +487,14 @@ function UploadPageContent() {
 
                     {/* ── Error State ────────────────────────────────────── */}
                     {step === 'error' && (
-                        <div className="mb-10 bg-red-50 border border-red-200 rounded-xl p-6 flex items-start gap-4">
-                            <AlertCircle className="text-red-500 mt-0.5 shrink-0" size={22} />
+                        <div className="mb-10 bg-amber-50 border border-amber-200 rounded-xl p-6 flex items-start gap-4">
+                            <AlertCircle className="text-amber-500 mt-0.5 shrink-0" size={22} />
                             <div>
-                                <h3 className="font-bold text-red-700 mb-1">Upload Failed</h3>
-                                <p className="text-sm text-red-600">{errorMsg}</p>
+                                <h3 className="font-bold text-amber-700 mb-1">Processing Still In Progress</h3>
+                                <p className="text-sm text-amber-700">{errorMsg}</p>
                                 <button
                                     onClick={resetUpload}
-                                    className="mt-3 text-sm font-bold text-red-700 underline hover:no-underline"
+                                    className="mt-3 text-sm font-bold text-amber-700 underline hover:no-underline"
                                 >
                                     Try again
                                 </button>
@@ -561,7 +572,7 @@ function UploadPageContent() {
                                             className="w-full text-xl font-bold leading-snug p-3 border border-[#2513ec]/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2513ec]/50"
                                         />
                                     ) : (
-                                        step === 'done' && article?.title && !article.title.startsWith('Pending') ? (
+                                        step === 'done' && article?.title && !/^pending\b/i.test(article.title) ? (
                                             <p className="text-xl font-bold leading-snug">{article.title}</p>
                                         ) : (
                                             <div className="h-7 w-3/4 bg-slate-100 rounded animate-pulse" />
