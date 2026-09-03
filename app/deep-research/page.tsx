@@ -22,7 +22,18 @@ import {
 } from 'lucide-react';
 import NotificationDropdown from '@/components/NotificationDropdown';
 import ResearchResults from '@/components/deep-research/ResearchResults';
-import { runDeepResearch, sendFollowUp, type DeepResearchResponse, type FollowUpResponse, ResearchError, type ResearchErrorType } from '@/services/research';
+import {
+  runDeepResearch,
+  sendFollowUp,
+  type DeepResearchResponse,
+  type DeepResearchPendingResponse,
+  type ResearchActivity,
+  type ResearchProgress,
+  type ResearchSourcePreview,
+  type FollowUpResponse,
+  ResearchError,
+  type ResearchErrorType,
+} from '@/services/research';
 
 type ResearchTurn = {
   kind: 'research';
@@ -32,6 +43,9 @@ type ResearchTurn = {
   error: string | null;
   errorType: ResearchErrorType | null;
   retryAfter: number | null;
+  progress: ResearchProgress | null;
+  activities: ResearchActivity[];
+  sourcePreviews: ResearchSourcePreview[];
 };
 
 type FollowUpTurn = {
@@ -55,6 +69,38 @@ interface HistoryItem {
 type ResearchState = 'idle' | 'results';
 
 const HISTORY_KEY = 'deep_research_history';
+
+function mergeActivities(
+  current: ResearchActivity[],
+  incoming: ResearchActivity[] = [],
+): ResearchActivity[] {
+  const bySequence = new Map((current || []).map((activity) => [activity.sequence, activity]));
+  incoming.forEach((activity) => bySequence.set(activity.sequence, activity));
+  return Array.from(bySequence.values()).sort((a, b) => a.sequence - b.sequence);
+}
+
+function mergeSourcePreviews(
+  current: ResearchSourcePreview[],
+  incoming: ResearchSourcePreview[] = [],
+): ResearchSourcePreview[] {
+  const byUrl = new Map((current || []).map((source) => [source.url, source]));
+  incoming.forEach((source) => {
+    if (source.url) byUrl.set(source.url, source);
+  });
+  return Array.from(byUrl.values()).slice(0, 20);
+}
+
+function applyProgressSnapshot(
+  turn: ResearchTurn,
+  snapshot: DeepResearchPendingResponse,
+): ResearchTurn {
+  return {
+    ...turn,
+    progress: snapshot.progress ?? turn.progress,
+    activities: mergeActivities(turn.activities, snapshot.activities),
+    sourcePreviews: mergeSourcePreviews(turn.sourcePreviews, snapshot.source_previews),
+  };
+}
 
 function groupHistory(items: HistoryItem[]) {
   const now = Date.now();
@@ -167,20 +213,48 @@ export default function DeepResearchPage() {
     
     // Create new turn
     const newTurnIndex = turns.length;
-    setTurns((prev) => [...prev, { kind: 'research', query: q, data: null, loading: true, error: null, errorType: null, retryAfter: null }]);
+    setTurns((prev) => [...prev, {
+      kind: 'research',
+      query: q,
+      data: null,
+      loading: true,
+      error: null,
+      errorType: null,
+      retryAfter: null,
+      progress: null,
+      activities: [],
+      sourcePreviews: [],
+    }]);
 
     try {
-      const result = await runDeepResearch(q);
+      const result = await runDeepResearch(q, {
+        onProgress: (snapshot) => {
+          setTurns((prev) => prev.map((turn, i) => {
+            if (i !== newTurnIndex || turn.kind !== 'research') return turn;
+            return applyProgressSnapshot(turn, snapshot);
+          }));
+        },
+      });
       setData(result);
       if (result.session_id) setSessionId(result.session_id);
-      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? { ...t, data: result, loading: false } as ResearchTurn : t));
+      setTurns((prev) => prev.map((turn, i) => {
+        if (i !== newTurnIndex || turn.kind !== 'research') return turn;
+        return {
+          ...turn,
+          data: result,
+          loading: false,
+          progress: result.progress ?? turn.progress,
+          activities: mergeActivities(turn.activities, result.activities),
+          sourcePreviews: mergeSourcePreviews(turn.sourcePreviews, result.source_previews),
+        };
+      }));
     } catch (err: any) {
       setError(err.message || 'Something went wrong');
       setErrorType(err instanceof ResearchError ? err.type : 'server');
       setRetryAfter(err instanceof ResearchError ? err.retryAfter ?? null : null);
       
       setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? {
-        ...t, loading: false, error: err.message || 'Something went wrong',
+         ...t, loading: false, error: err.message || 'Something went wrong',
         errorType: err instanceof ResearchError ? err.type : 'server',
         retryAfter: err instanceof ResearchError ? err.retryAfter ?? null : null
       } : t));
@@ -569,6 +643,9 @@ function TurnBlock({ turn }: { turn: ChatTurn }) {
         error={turn.error}
         errorType={turn.errorType}
         retryAfter={turn.retryAfter}
+        progress={turn.progress}
+        activities={turn.activities}
+        sourcePreviews={turn.sourcePreviews}
       />
     );
   } else {

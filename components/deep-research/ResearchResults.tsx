@@ -8,11 +8,17 @@ import {
   Sparkles,
   ExternalLink,
   AlertCircle,
-  Loader2,
   Zap,
   Clock,
 } from 'lucide-react';
-import type { DeepResearchResponse, ResearchErrorType } from '@/services/research';
+import type {
+  DeepResearchResponse,
+  ResearchActivity,
+  ResearchErrorType,
+  ResearchProgress,
+  ResearchSourcePreview,
+} from '@/services/research';
+import ResearchProgressView from './ResearchProgress';
 
 interface ResearchResultsProps {
   query: string;
@@ -21,6 +27,9 @@ interface ResearchResultsProps {
   error?: string | null;
   errorType?: ResearchErrorType | null;
   retryAfter?: number | null;
+  progress?: ResearchProgress | null;
+  activities?: ResearchActivity[];
+  sourcePreviews?: ResearchSourcePreview[];
 }
 
 function extractAbstract(text: string): string {
@@ -119,7 +128,15 @@ function MarkdownContent({ content }: { content: string }) {
 }
 
 export default function ResearchResults({
-  query, data, loading, error, errorType, retryAfter,
+  query,
+  data,
+  loading,
+  error,
+  errorType,
+  retryAfter,
+  progress,
+  activities,
+  sourcePreviews,
 }: ResearchResultsProps) {
   const abstract = data ? extractAbstract(data.answer) : '';
 
@@ -152,13 +169,11 @@ export default function ResearchResults({
 
           {/* Loading */}
           {loading && (
-            <div className="flex flex-col items-center justify-center py-32 gap-6">
-              <Loader2 size={40} className="text-[#135bec] animate-spin" />
-              <div className="text-center space-y-2">
-                <p className="text-sm font-black text-slate-700">Running agentic pipeline...</p>
-                <p className="text-xs text-slate-400">Planner → Researcher → Writer → Reviewer</p>
-              </div>
-            </div>
+            <ResearchProgressView
+              progress={progress}
+              activities={activities}
+              sourcePreviews={sourcePreviews}
+            />
           )}
 
           {/* Error */}
