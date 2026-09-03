@@ -42,6 +42,8 @@ console.log('\n=== Preservation: Proxy logic structure unchanged ===');
 
 const routePath = path.join(__dirname, '../app/api/ai-proxy/[...path]/route.ts');
 const routeSource = fs.readFileSync(routePath, 'utf8');
+const routeHelpersPath = path.join(__dirname, '../app/api/ai-proxy/[...path]/route-helpers.ts');
+const routeHelpersSource = fs.readFileSync(routeHelpersPath, 'utf8');
 
 // GET handler must exist
 assert(
@@ -66,9 +68,9 @@ assert(
 
 // AI_URL must be configurable via env
 assert(
-  /process\.env\.AI_URL/.test(routeSource),
-  'AI_URL SHOULD be read from process.env.AI_URL',
-  'process.env.AI_URL not found in route.ts'
+  /resolveAiUrl/.test(routeSource) && /process\.env\.AI_URL/.test(routeHelpersSource),
+  'AI_URL SHOULD be resolved from process.env.AI_URL',
+  'AI_URL resolver or process.env.AI_URL not found'
 );
 
 // Error handling: 502 on fetch failure
@@ -112,18 +114,19 @@ assert(
   'rate_limit_exceeded handling missing from research.ts'
 );
 
-// 5 minute max wait
+// 20 minute max wait (current production contract)
 assert(
-  /5\s*\*\s*60\s*\*\s*1000/.test(researchSource),
-  'research.ts SHOULD have 5 minute max polling timeout',
-  '5 minute timeout missing from research.ts'
+  /20\s*\*\s*60\s*\*\s*1000/.test(researchSource),
+  'research.ts SHOULD have 20 minute max polling timeout',
+  '20 minute timeout missing from research.ts'
 );
 
-// 3 second polling interval
+// Adaptive polling starts at 3 seconds
 assert(
-  /intervalMs\s*=\s*3000/.test(researchSource),
-  'research.ts SHOULD poll every 3 seconds',
-  '3 second interval missing from research.ts'
+  /INITIAL_INTERVAL_MS\s*=\s*3000/.test(researchSource)
+    && /MAX_INTERVAL_MS\s*=\s*8000/.test(researchSource),
+  'research.ts SHOULD preserve adaptive 3-8 second polling',
+  'Adaptive polling bounds missing from research.ts'
 );
 
 // task_id null check

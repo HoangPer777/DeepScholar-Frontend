@@ -20,6 +20,60 @@ export class ResearchError extends Error {
   }
 }
 
+export type ResearchPhase =
+  | 'queued'
+  | 'planning'
+  | 'clarifying'
+  | 'searching'
+  | 'synthesizing'
+  | 'drafting'
+  | 'reviewing'
+  | 'rewriting'
+  | 'finalizing'
+  | 'completed'
+  | 'failed';
+
+export type ResearchActivityState = 'active' | 'completed' | 'skipped' | 'failed';
+
+export interface ResearchProgress {
+  phase: ResearchPhase;
+  message: string;
+  iteration: number;
+  max_iterations: number;
+  started_at: string;
+  updated_at: string;
+}
+
+export interface ResearchActivity {
+  sequence: number;
+  phase: ResearchPhase;
+  state: ResearchActivityState;
+  title: string;
+  detail: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ResearchSourcePreview {
+  title: string;
+  url: string;
+  domain: string;
+  source_type: string;
+  year?: string | null;
+}
+
+export interface DeepResearchPendingResponse {
+  status: 'pending';
+  progress?: ResearchProgress;
+  activities?: ResearchActivity[];
+  source_previews?: ResearchSourcePreview[];
+}
+
+export interface DeepResearchRunOptions {
+  onProgress?: (snapshot: DeepResearchPendingResponse) => void;
+  signal?: AbortSignal;
+}
+
 export interface ResearchSource {
   index: number;
   title: string;
@@ -32,6 +86,7 @@ export interface ResearchSource {
 }
 
 export interface DeepResearchResponse {
+  status?: 'done';
   session_id?: string;
   answer: string;
   sources: ResearchSource[];
@@ -46,6 +101,9 @@ export interface DeepResearchResponse {
   iterations_used: number;
   decision: string;
   review_feedback: string | null;
+  progress?: ResearchProgress;
+  activities?: ResearchActivity[];
+  source_previews?: ResearchSourcePreview[];
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +215,11 @@ export async function sendFollowUp(
 // Deep research (one-shot, async polling)
 // ---------------------------------------------------------------------------
 
-export async function runDeepResearch(query: string): Promise<DeepResearchResponse> {
+export async function runDeepResearch(
+  query: string,
+  options: DeepResearchRunOptions = {},
+): Promise<DeepResearchResponse> {
+  const { onProgress, signal } = options;
   // Step 1: Start the job
   let startRes: Response;
   try {
@@ -165,6 +227,7 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
+      signal,
     });
   } catch (networkErr: any) {
     throw new ResearchError(
@@ -206,7 +269,7 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
     pollInFlight = true;
     let pollRes: Response;
     try {
-      pollRes = await fetch(pollUrl);
+      pollRes = await fetch(pollUrl, { cache: 'no-store', signal });
     } catch {
       pollInFlight = false;
       consecutivePollErrors += 1;
@@ -234,11 +297,14 @@ export async function runDeepResearch(query: string): Promise<DeepResearchRespon
       throw new ResearchError(`AI service error: ${detail}`, 'server');
     }
 
-    const data = await pollRes.json();
+    const data = await pollRes.json() as DeepResearchPendingResponse | DeepResearchResponse;
     if (data.status === 'done') {
       return data as DeepResearchResponse;
     }
-
+    if (data.status === 'pending') {
+      onProgress?.(data);
+    }
+    
     consecutivePending++;
     if (consecutivePending % BACKOFF_AFTER_N_POLLS === 0) {
       currentInterval = Math.min(currentInterval * BACKOFF_MULTIPLIER, MAX_INTERVAL_MS);
