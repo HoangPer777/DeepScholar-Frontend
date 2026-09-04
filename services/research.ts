@@ -35,6 +35,16 @@ export type ResearchPhase =
 
 export type ResearchActivityState = 'active' | 'completed' | 'skipped' | 'failed';
 
+export type ResearchAgent =
+  | 'system'
+  | 'planner'
+  | 'clarifier'
+  | 'researcher'
+  | 'reader'
+  | 'writer'
+  | 'reviewer'
+  | 'fast_chat';
+
 export interface ResearchProgress {
   phase: ResearchPhase;
   message: string;
@@ -48,6 +58,8 @@ export interface ResearchActivity {
   sequence: number;
   phase: ResearchPhase;
   state: ResearchActivityState;
+  /** Optional for compatibility with progress snapshots from older workers. */
+  agent?: ResearchAgent;
   title: string;
   detail: string;
   timestamp: string;
@@ -85,6 +97,28 @@ export interface ResearchSource {
   apa_venue?: string;
 }
 
+export interface ResearchModelInfo {
+  agent?: string;
+  provider: string;
+  model: string | null;
+  selected_provider?: string | null;
+  selected_model?: string | null;
+  status?: string;
+  routing?: string;
+  fallback_used?: boolean;
+  invocations?: number;
+  available_models?: string[];
+  attempts?: ResearchModelAttempt[];
+}
+
+export interface ResearchModelAttempt {
+  model: string;
+  provider: string;
+  status: string;
+  error_type?: string | null;
+  duration_ms?: number;
+}
+
 export interface DeepResearchResponse {
   status?: 'done';
   session_id?: string;
@@ -99,6 +133,8 @@ export interface DeepResearchResponse {
   };
   confidence_score: number;
   iterations_used: number;
+  writer_model?: ResearchModelInfo;
+  model_usage?: Record<string, ResearchModelInfo>;
   decision: string;
   review_feedback: string | null;
   progress?: ResearchProgress;
