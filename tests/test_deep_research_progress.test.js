@@ -38,7 +38,15 @@ console.log('\n=== Deep Research progress service contract ===');
   "export type ResearchPhase",
   "export interface ResearchProgress",
   "export interface ResearchActivity",
+  "export type ResearchAgent",
+  "agent?: ResearchAgent;",
   "export interface ResearchSourcePreview",
+  "export interface ResearchModelInfo",
+  "export interface ResearchModelAttempt",
+  "selected_model?: string | null;",
+  "selected_provider?: string | null;",
+  "writer_model?: ResearchModelInfo;",
+  "model_usage?: Record<string, ResearchModelInfo>;",
   "export interface DeepResearchPendingResponse",
   'onProgress?: (snapshot: DeepResearchPendingResponse) => void',
   'onProgress?.(data)',
@@ -94,11 +102,19 @@ console.log('\n=== ResearchProgress component contract ===');
   "'drafting'",
   "'reviewing'",
   "'finalizing'",
-  'aria-label="Tiến trình Deep Research"',
-  'Kế hoạch tìm kiếm',
-  'Nguồn đã tìm thấy',
-  'Phản hồi đánh giá gần nhất',
-  'Hoạt động gần đây',
+  'aria-label="Deep Research progress"',
+  'Search plan',
+  'Sources discovered',
+  'Activity log',
+    'Review score:',
+    'model_attempts',
+    'available_models',
+    'duration_ms',
+  'PlannerAgent',
+  'ResearcherAgent',
+  'WriterAgent',
+  'ReviewerAgent',
+  'ReaderAgent',
   'motion-reduce:',
 ].forEach((fragment) => {
   assert(
@@ -142,6 +158,22 @@ assert(
     && resultsSource.includes("errorType === 'network'"),
   'existing error states remain in ResearchResults',
   'Existing error handling was removed',
+);
+assert(
+  resultsSource.includes('Model & verification')
+    && resultsSource.includes('data.writer_model?.selected_model')
+    && resultsSource.includes('Agent model usage')
+    && !resultsSource.includes('bg-slate-900 p-4 text-white'),
+  'writer model metadata is shown in a light scientific summary card',
+  'Writer model metadata is missing or the dark summary card remains',
+);
+
+assert(
+  !/[À-ỹ]/.test(pageSource)
+    && !/[À-ỹ]/.test(resultsSource)
+    && !/[À-ỹ]/.test(progressSource),
+  'Deep Research frontend copy is English-only',
+  'Vietnamese UI copy remains in the Deep Research surface',
 );
 
 console.log('\n=== Summary ===');

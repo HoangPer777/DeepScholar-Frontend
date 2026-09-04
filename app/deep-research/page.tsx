@@ -139,6 +139,7 @@ export default function DeepResearchPage() {
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null);
   
   const bottomRef = React.useRef<HTMLDivElement>(null);
+  const previousTurnsLength = React.useRef(0);
   // isAnyLoading: true only when a follow-up turn is in-flight.
   // Research turns have their own loading state shown inside TurnBlock.
   // We must NOT disable the follow-up input while research is loading —
@@ -147,9 +148,17 @@ export default function DeepResearchPage() {
   const isAnyLoading = isFollowUpLoading || loading;
 
   useEffect(() => {
-    if (bottomRef.current) {
+    const latestTurn = turns[turns.length - 1];
+    const addedFollowUp = turns.length > previousTurnsLength.current
+      && latestTurn?.kind === 'followup'
+      && latestTurn.loading;
+
+    // Keep research results at the top of the page. Only move to the new
+    // follow-up composer response that the user explicitly started.
+    if (addedFollowUp && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
+    previousTurnsLength.current = turns.length;
   }, [turns]);
 
   // Sync current conversation to localStorage
@@ -322,7 +331,7 @@ export default function DeepResearchPage() {
 
         {/* History Sidebar */}
         <aside
-          className={`sticky top-0 z-20 hidden h-screen shrink-0 border-r border-slate-200 bg-white transition-all duration-300 lg:flex lg:flex-col ${
+          className={`sticky top-0 z-20 hidden h-screen shrink-0 border-r border-slate-200/80 bg-white transition-all duration-300 lg:flex lg:flex-col ${
             sidebarCollapsed ? 'w-16' : 'w-64'
           }`}
         >
@@ -466,8 +475,13 @@ export default function DeepResearchPage() {
         {/* Main content */}
         <section className="flex-1 min-w-0">
           {/* Header */}
-          <header className="sticky top-0 z-10 border-b border-[#d9deea] bg-[#f7f8fc] px-4 py-3 md:px-7">
-            <div className="flex items-center justify-end gap-3">
+          <header className="sticky top-0 z-10 border-b border-slate-200/80 bg-[#f6f6f8]/95 px-4 py-3 backdrop-blur-md md:px-7">
+            <div className="flex items-center justify-between gap-4">
+              <div className="hidden min-w-0 md:block">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#135bec]">Research workspace</p>
+                <p className="mt-1 truncate text-sm font-bold text-slate-700">Multi-agent scientific discovery</p>
+              </div>
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
               <div className="relative w-[280px] shrink-0">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -489,19 +503,20 @@ export default function DeepResearchPage() {
               <Link href={'/profile' as Route} className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-[#ecd6c3] text-sm font-bold text-white">
                 T
               </Link>
+              </div>
             </div>
           </header>
 
           {/* Page content */}
           <div className={pageState === 'chat' ? 'flex flex-col flex-1 min-h-[calc(100vh-57px)] relative' : 'flex items-center justify-center min-h-[calc(100vh-57px)]'}>
             {pageState === 'idle' && (
-              <div className="w-full max-w-3xl mx-auto px-6 py-16 space-y-12 text-center animate-in fade-in slide-in-from-bottom-8 duration-700">
+              <div className="w-full max-w-4xl mx-auto px-6 py-14 space-y-10 text-center animate-in fade-in slide-in-from-bottom-8 duration-700">
                 <div className="space-y-4">
-                  <h2 className="text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-[1.1]">
+                  <h2 className="text-4xl lg:text-6xl font-black text-slate-900 tracking-tight leading-[1.08]">
                     The future of <span className="text-[#135bec]">Scientific Discovery</span> starts here.
                   </h2>
-                  <p className="text-lg text-slate-500 font-medium max-w-2xl mx-auto leading-relaxed">
-                    Enter a complex research topic to analyze multiple databases and synthesize localized insights instantly.
+                  <p className="text-base lg:text-lg text-slate-500 font-medium max-w-2xl mx-auto leading-relaxed">
+                    Ask a complex question and DeepScholar will plan the research, find academic sources, synthesize evidence, and review the answer.
                   </p>
                 </div>
 
@@ -536,6 +551,12 @@ export default function DeepResearchPage() {
                   </div>
                 </form>
 
+                <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] font-bold text-slate-400">
+                  {['PlannerAgent', 'ResearcherAgent', 'WriterAgent', 'ReviewerAgent'].map((agent) => (
+                    <span key={agent} className="rounded-full border border-slate-200 bg-white px-3 py-1.5 shadow-sm">{agent}</span>
+                  ))}
+                </div>
+
                 {/* Recent searches quick access */}
                 {history.length > 0 && (
                   <div className="space-y-2">
@@ -567,8 +588,8 @@ export default function DeepResearchPage() {
                 </div>
                 
                 {/* Sticky input */}
-                <div className="absolute bottom-0 left-0 right-0 z-10 bg-white/90 backdrop-blur-md border-t border-slate-100 p-4 pb-8">
-                  <form onSubmit={handleFollowUp} className="max-w-3xl mx-auto relative bg-white rounded-[24px] shadow-sm border border-slate-200 flex items-end overflow-hidden p-2 focus-within:border-[#135bec]/50 focus-within:ring-4 focus-within:ring-[#135bec]/10 transition-all">
+                <div className="absolute bottom-0 left-0 right-0 z-10 border-t border-slate-200/80 bg-[#f6f6f8]/95 px-4 pb-6 pt-3 backdrop-blur-md sm:px-6 lg:px-8">
+                  <form onSubmit={handleFollowUp} className="relative mx-auto flex w-full max-w-[1176px] items-end overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm transition-all focus-within:border-[#135bec]/50 focus-within:ring-4 focus-within:ring-[#135bec]/10">
                     <textarea
                       value={followUp}
                       onChange={(e) => setFollowUp(e.target.value)}
@@ -654,56 +675,51 @@ function TurnBlock({ turn }: { turn: ChatTurn }) {
 }
 
 function FollowUpBlock({ turn }: { turn: FollowUpTurn }) {
-  // We can reuse parts of ResearchResults styling here
   return (
-    <div className="bg-white border-t border-slate-100">
-      <div className="max-w-[900px] mx-auto p-12 lg:px-20 lg:py-12 space-y-8">
-        <div className="flex items-start gap-4">
-          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-            <span className="font-bold text-slate-600">You</span>
+    <div className="border-t border-slate-200/80 bg-[#f6f6f8]">
+      <div className="mx-auto max-w-[1240px] space-y-5 px-4 py-7 sm:px-6 sm:py-10 lg:px-8">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-200 text-[10px] font-black text-slate-600">
+            YOU
           </div>
-          <div className="pt-2 text-lg font-semibold text-slate-800">
+          <div className="min-w-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold leading-relaxed text-slate-800 shadow-sm">
             {turn.question}
           </div>
         </div>
-        
-        <div className="pl-14 space-y-6">
+
+        <div className="pl-12">
           {turn.loading && (
-            <div className="flex items-center gap-3 text-slate-400">
-              <Loader2 size={16} className="animate-spin" />
-              <span className="text-sm">Thinking...</span>
+            <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm text-emerald-800">
+              <Loader2 size={16} className="motion-safe:animate-spin motion-reduce:animate-none" />
+              <span><strong>FastChatAgent</strong> is preparing an answer from the research context.</span>
             </div>
           )}
-          
+
           {turn.error && (
-            <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 text-red-600">
-              <AlertCircle size={18} className="shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-red-600">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
               <p className="text-sm">{turn.error}</p>
             </div>
           )}
-          
+
           {turn.data && (
-            <>
-              {/* Fast Reply badge — shown when response came from FastChatAgent */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               {turn.data.is_fast_chat && (
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 w-fit">
+                <div className="mb-4 flex w-fit items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                   <Zap size={12} />
-                  Fast Reply
+                  FastChatAgent · Fast Reply
                 </div>
               )}
               <div className="prose prose-sm md:prose-base prose-slate max-w-none prose-a:text-[#135bec] hover:prose-a:underline">
-                {/* Normally we'd use MarkdownContent, for simplicity we just render strings for now */}
                 {turn.data.answer.split('\n').map((line, i) => {
                   if (!line.trim()) return <br key={i} />;
                   return <p key={i} className="mb-2 leading-relaxed text-slate-700">{line}</p>;
                 })}
               </div>
-              
+
               {turn.data.citations && turn.data.citations.length > 0 && (
-                <div className="border-t border-slate-100 pt-6 mt-6 space-y-3">
-                  <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">
-                    Sources
-                  </h3>
+                <div className="mt-6 space-y-3 border-t border-slate-100 pt-6">
+                  <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Sources</h3>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {turn.data.citations.map((s) => (
                       <a
@@ -711,19 +727,17 @@ function FollowUpBlock({ turn }: { turn: FollowUpTurn }) {
                         href={s.url || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 hover:border-[#135bec]/20 hover:bg-blue-50/40 transition-all group"
+                        className="group flex items-start gap-3 rounded-xl border border-slate-100 p-3 transition-all hover:border-blue-200 hover:bg-blue-50/40"
                       >
-                        <span className="text-[10px] font-black text-[#135bec]/50 mt-0.5 shrink-0 w-6">[{s.index}]</span>
-                        <span className="flex-1 text-[12px] font-medium text-slate-600 group-hover:text-slate-900 leading-snug line-clamp-2">{s.title}</span>
-                        {s.url && (
-                          <ExternalLink size={12} className="shrink-0 mt-0.5 text-slate-300 group-hover:text-[#135bec] transition-colors" />
-                        )}
+                        <span className="mt-0.5 w-6 shrink-0 text-[10px] font-black text-[#135bec]/60">[{s.index}]</span>
+                        <span className="line-clamp-2 flex-1 text-[12px] font-medium leading-snug text-slate-600 group-hover:text-slate-900">{s.title}</span>
+                        {s.url && <ExternalLink size={12} className="mt-0.5 shrink-0 text-slate-300 group-hover:text-[#135bec]" />}
                       </a>
                     ))}
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>
