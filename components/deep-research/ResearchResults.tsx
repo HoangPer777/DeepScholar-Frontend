@@ -37,15 +37,45 @@ interface ResearchResultsProps {
   sourcePreviews?: ResearchSourcePreview[];
 }
 
+type AbstractBlock = {
+  start: number;
+  end: number;
+  inlineContent?: string;
+};
+
+function findAbstractBlock(lines: string[]): AbstractBlock | null {
+  for (let start = 0; start < lines.length; start++) {
+    const line = lines[start];
+    const headingMatch = line.match(/^\s*#{1,6}\s+abstract\s*:?\s*(.*)$/i);
+    const boldMatch = line.match(/^\s*\*\*abstract\s*:?\*\*\s*(.*)$/i);
+    const match = headingMatch ?? boldMatch;
+
+    if (!match) continue;
+
+    let end = start + 1;
+    while (end < lines.length) {
+      const nextLine = lines[end];
+      const isMarkdownHeading = /^\s*#{1,6}\s+/.test(nextLine);
+      const isBoldSectionLabel = /^\s*\*\*(?:introduction|methodology|results?(?:\s*&\s*key advances)?|discussion|conclusion|references)\s*:?\*\*\s*$/i.test(nextLine);
+      if (isMarkdownHeading || isBoldSectionLabel) break;
+      end++;
+    }
+
+    return { start, end, inlineContent: match[1].trim() || undefined };
+  }
+
+  return null;
+}
+
 function extractAbstract(text: string): string {
   const lines = text.split('\n');
-  const paragraphs: string[] = [];
-  for (const line of lines) {
-    if (line.startsWith('## ') && paragraphs.length > 0) break;
-    const clean = line.replace(/^##\s*Abstract\s*/i, '').trim();
-    if (clean) paragraphs.push(clean);
-  }
-  return paragraphs.join(' ').slice(0, 600);
+  const block = findAbstractBlock(lines);
+  if (!block) return '';
+
+  return [block.inlineContent, ...lines.slice(block.start + 1, block.end)]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
 }
 
 function sourceCategory(sourceType: string): 'Academic' | 'Web' {
@@ -77,25 +107,16 @@ function renderInline(text: string, key: number): React.ReactNode {
 function MarkdownContent({ content }: { content: string }) {
   const lines = content.split('\n');
   const elements: React.ReactNode[] = [];
+  const abstractBlock = findAbstractBlock(lines);
   let i = 0;
-  let skipAbstract = false;
 
   while (i < lines.length) {
-    const line = lines[i];
-
-    if (line.match(/^##\s*Abstract\s*$/i)) {
-      skipAbstract = true;
-      i++;
+    if (abstractBlock && i === abstractBlock.start) {
+      i = abstractBlock.end;
       continue;
     }
-    if (skipAbstract) {
-      if (line.startsWith('## ')) {
-        skipAbstract = false;
-      } else {
-        i++;
-        continue;
-      }
-    }
+
+    const line = lines[i];
 
     if (line.startsWith('## ')) {
       elements.push(

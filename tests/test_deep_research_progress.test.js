@@ -167,6 +167,25 @@ assert(
   'writer model metadata is shown in a light scientific summary card',
   'Writer model metadata is missing or the dark summary card remains',
 );
+assert(
+  resultsSource.includes('function findAbstractBlock')
+    && resultsSource.includes('^\\s*#{1,6}\\s+abstract')
+    && resultsSource.includes('^\\s*\\*\\*abstract'),
+  'abstract parser recognizes Markdown headings and bold labels',
+  'Abstract heading or **Abstract** label recognition is missing',
+);
+assert(
+  resultsSource.includes('lines.slice(block.start + 1, block.end)')
+    && !resultsSource.includes(".slice(0, 600)"),
+  'abstract content is preserved without a 600-character truncation',
+  'Abstract parser still truncates content or does not read its full block',
+);
+assert(
+  resultsSource.includes('i = abstractBlock.end;')
+    && resultsSource.includes('isBoldSectionLabel'),
+  'abstract block is excluded from the body without hiding later sections',
+  'Abstract body exclusion or bold section boundary detection is missing',
+);
 
 assert(
   !/[À-ỹ]/.test(pageSource)
