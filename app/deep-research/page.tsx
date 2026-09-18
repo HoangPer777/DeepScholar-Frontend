@@ -28,6 +28,7 @@ import {
   type DeepResearchResponse,
   type DeepResearchPendingResponse,
   type ResearchActivity,
+  type ResearchAgentOutputs,
   type ResearchProgress,
   type ResearchSourcePreview,
   type FollowUpResponse,
@@ -46,6 +47,7 @@ type ResearchTurn = {
   progress: ResearchProgress | null;
   activities: ResearchActivity[];
   sourcePreviews: ResearchSourcePreview[];
+  agentOutputs: ResearchAgentOutputs | null;
 };
 
 type FollowUpTurn = {
@@ -233,6 +235,7 @@ export default function DeepResearchPage() {
       progress: null,
       activities: [],
       sourcePreviews: [],
+      agentOutputs: null,
     }]);
 
     try {
@@ -255,18 +258,29 @@ export default function DeepResearchPage() {
           progress: result.progress ?? turn.progress,
           activities: mergeActivities(turn.activities, result.activities),
           sourcePreviews: mergeSourcePreviews(turn.sourcePreviews, result.source_previews),
+          agentOutputs: result.agent_outputs ?? null,
         };
       }));
     } catch (err: any) {
+      const researchError = err instanceof ResearchError ? err : null;
       setError(err.message || 'Something went wrong');
-      setErrorType(err instanceof ResearchError ? err.type : 'server');
-      setRetryAfter(err instanceof ResearchError ? err.retryAfter ?? null : null);
+      setErrorType(researchError?.type ?? 'server');
+      setRetryAfter(researchError?.retryAfter ?? null);
       
-      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? {
-         ...t, loading: false, error: err.message || 'Something went wrong',
-        errorType: err instanceof ResearchError ? err.type : 'server',
-        retryAfter: err instanceof ResearchError ? err.retryAfter ?? null : null
-      } : t));
+      setTurns((prev) => prev.map((t, i) => {
+        if (i !== newTurnIndex || t.kind !== 'research') return t;
+        return {
+          ...t,
+          loading: false,
+          error: err.message || 'Something went wrong',
+          errorType: researchError?.type ?? 'server',
+          retryAfter: researchError?.retryAfter ?? null,
+          progress: researchError?.progress ?? t.progress,
+          activities: mergeActivities(t.activities, researchError?.activities),
+          sourcePreviews: mergeSourcePreviews(t.sourcePreviews, researchError?.sourcePreviews),
+          agentOutputs: researchError?.agentOutputs ?? t.agentOutputs,
+        };
+      }));
     } finally {
       setLoading(false);
     }
@@ -667,6 +681,7 @@ function TurnBlock({ turn }: { turn: ChatTurn }) {
         progress={turn.progress}
         activities={turn.activities}
         sourcePreviews={turn.sourcePreviews}
+        agentOutputs={turn.agentOutputs}
       />
     );
   } else {

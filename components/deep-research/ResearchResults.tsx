@@ -19,6 +19,7 @@ import {
 import type {
   DeepResearchResponse,
   ResearchActivity,
+  ResearchAgentOutputs,
   ResearchErrorType,
   ResearchProgress,
   ResearchSourcePreview,
@@ -35,6 +36,7 @@ interface ResearchResultsProps {
   progress?: ResearchProgress | null;
   activities?: ResearchActivity[];
   sourcePreviews?: ResearchSourcePreview[];
+  agentOutputs?: ResearchAgentOutputs | null;
 }
 
 type AbstractBlock = {
@@ -203,6 +205,7 @@ export default function ResearchResults({
   progress,
   activities,
   sourcePreviews,
+  agentOutputs,
 }: ResearchResultsProps) {
   const abstract = data ? extractAbstract(data.answer) : '';
   const hasCompletedTrace = Boolean(
@@ -260,11 +263,13 @@ export default function ResearchResults({
               progress={progress}
               activities={activities}
               sourcePreviews={sourcePreviews}
+              agentOutputs={agentOutputs}
             />
           )}
 
           {error && !loading && (
-            errorType === 'rate_limit' ? (
+            <>
+            {errorType === 'rate_limit' ? (
               <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-8 sm:p-12">
                 <div className="mx-auto flex max-w-md flex-col items-center gap-5 text-center">
                   <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-amber-500 shadow-sm"><Zap size={28} /></div>
@@ -283,7 +288,8 @@ export default function ResearchResults({
                   <p className="text-xs leading-relaxed text-red-600">{error}</p>
                 </div>
               </div>
-            )
+            )}
+            </>
           )}
 
           {data && !loading && (
@@ -355,6 +361,7 @@ export default function ResearchResults({
                       progress={progress}
                       activities={activities}
                       sourcePreviews={sourcePreviews}
+                      agentOutputs={agentOutputs ?? data.agent_outputs}
                       terminalLayout="summary"
                       traceOpen={showTraceDetails}
                       onTraceToggle={() => setShowTraceDetails((value) => !value)}
@@ -368,6 +375,7 @@ export default function ResearchResults({
                     progress={progress}
                     activities={activities}
                     sourcePreviews={sourcePreviews}
+                    agentOutputs={agentOutputs ?? data.agent_outputs}
                     terminalLayout="details"
                   />
                 </div>
@@ -381,6 +389,7 @@ export default function ResearchResults({
                 progress={progress}
                 activities={activities}
                 sourcePreviews={sourcePreviews}
+                agentOutputs={agentOutputs}
               />
             </div>
           )}
