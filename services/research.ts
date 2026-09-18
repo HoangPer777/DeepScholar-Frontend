@@ -13,10 +13,18 @@ export type ResearchErrorType = 'rate_limit' | 'network' | 'server';
 export class ResearchError extends Error {
   type: ResearchErrorType;
   retryAfter?: number; // seconds
-  constructor(message: string, type: ResearchErrorType, retryAfter?: number) {
+  progress?: ResearchProgress;
+  activities?: ResearchActivity[];
+  sourcePreviews?: ResearchSourcePreview[];
+  agentOutputs?: ResearchAgentOutputs;
+  constructor(message: string, type: ResearchErrorType, retryAfter?: number, trace?: ResearchErrorTrace) {
     super(message);
     this.type = type;
     this.retryAfter = retryAfter;
+    this.progress = trace?.progress;
+    this.activities = trace?.activities;
+    this.sourcePreviews = trace?.source_previews;
+    this.agentOutputs = trace?.agent_outputs;
   }
 }
 
@@ -81,6 +89,38 @@ export interface DeepResearchPendingResponse {
   source_previews?: ResearchSourcePreview[];
 }
 
+export interface DeepResearchErrorResponse {
+  status: 'error';
+  error_code: string;
+  message: string;
+  retryable?: boolean;
+  progress?: ResearchProgress;
+  activities?: ResearchActivity[];
+  source_previews?: ResearchSourcePreview[];
+  agent_outputs?: ResearchAgentOutputs;
+}
+
+export interface ResearchDraft {
+  iteration: number;
+  content: string;
+  truncated: boolean;
+}
+
+export interface ResearchReview {
+  iteration: number;
+  score: number;
+  decision: 'accept' | 'rewrite' | 'rejected';
+  feedback: string;
+  truncated: boolean;
+}
+
+export interface ResearchAgentOutputs {
+  drafts: ResearchDraft[];
+  reviews: ResearchReview[];
+}
+
+type ResearchErrorTrace = Pick<DeepResearchErrorResponse, 'progress' | 'activities' | 'source_previews' | 'agent_outputs'>;
+
 export interface DeepResearchRunOptions {
   onProgress?: (snapshot: DeepResearchPendingResponse) => void;
   signal?: AbortSignal;
@@ -137,6 +177,7 @@ export interface DeepResearchResponse {
   model_usage?: Record<string, ResearchModelInfo>;
   decision: string;
   review_feedback: string | null;
+  agent_outputs?: ResearchAgentOutputs;
   progress?: ResearchProgress;
   activities?: ResearchActivity[];
   source_previews?: ResearchSourcePreview[];
@@ -333,9 +374,17 @@ export async function runDeepResearch(
       throw new ResearchError(`AI service error: ${detail}`, 'server');
     }
 
-    const data = await pollRes.json() as DeepResearchPendingResponse | DeepResearchResponse;
+    const data = await pollRes.json() as DeepResearchPendingResponse | DeepResearchResponse | DeepResearchErrorResponse;
     if (data.status === 'done') {
       return data as DeepResearchResponse;
+    }
+    if (data.status === 'error') {
+      throw new ResearchError(
+        data.message || 'Deep Research could not complete with verified evidence.',
+        'server',
+        undefined,
+        data,
+      );
     }
     if (data.status === 'pending') {
       onProgress?.(data);
