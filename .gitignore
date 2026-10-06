@@ -10,10 +10,11 @@ dist/
 *.swp
 *.swo
 
-# Environment variables
+# Environment variables — never commit runtime env files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.local.example
 
 # IDE
 .vscode/
@@ -37,3 +38,5 @@ coverage/
 
 *.md
 !README.md
+
+certificates
