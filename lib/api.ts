@@ -12,23 +12,23 @@ export const fetchWithAuth = async (endpoint: string, options: RequestInit = {})
   };
 
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+    // Remove legacy bearer tokens; authorization now comes from the HttpOnly cookie.
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
   }
 
   const response = await fetch(url, {
     ...options,
     headers,
+    credentials: 'same-origin',
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     
-    // Automatically clear expired tokens to allow anonymous read fallback or clean login state
-    if (response.status === 401 && (errorData.code === 'token_not_valid' || errorData.detail?.includes('Given token not valid'))) {
+    if (response.status === 401) {
       if (typeof window !== 'undefined') {
+        void fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');

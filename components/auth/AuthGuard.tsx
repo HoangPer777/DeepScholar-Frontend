@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { api } from '@/lib/api';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -10,12 +11,16 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem('access_token')) {
-      setAllowed(true);
-      return;
-    }
-    const destination = `${pathname}${window.location.search}`;
-    router.replace(`/login?next=${encodeURIComponent(destination)}`);
+    let active = true;
+    api.get('/auth/me')
+      .then(() => {
+        if (active) setAllowed(true);
+      })
+      .catch(() => {
+        const destination = `${pathname}${window.location.search}`;
+        if (active) router.replace(`/login?next=${encodeURIComponent(destination)}`);
+      });
+    return () => { active = false; };
   }, [pathname, router]);
 
   if (!allowed) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="animate-spin text-[#135bec]" /></div>;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveAiUrl } from './route-helpers';
+import { ACCESS_TOKEN_COOKIE, clearAuthCookies, isSameOriginRequest } from '@/lib/auth-cookies';
 
 export const maxDuration = 60; // Vercel: allow up to 60s per proxy request
 export const dynamic = 'force-dynamic'; // Always read env vars at runtime
@@ -34,6 +35,9 @@ async function fetchWithTimeout(
 async function proxyRequest(req: NextRequest, pathSegments: string[], method: string) {
   const path = pathSegments.join('/');
   const search = req.nextUrl.search;
+  if (method !== 'GET' && !isSameOriginRequest(req)) {
+    return NextResponse.json({ detail: 'Cross-origin request rejected.' }, { status: 403 });
+  }
   
   // Next.js strips trailing slashes, but FastAPI requires it for some endpoints (like /chat/)
   const hasTrailingSlash = req.nextUrl.pathname.endsWith('/') || path === 'chat';
@@ -46,8 +50,8 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
     'Content-Type': req.headers.get('content-type') || 'application/json',
   };
 
-  const auth = req.headers.get('authorization');
-  if (auth) headers['Authorization'] = auth;
+  const accessToken = req.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
   let body: string | undefined;
   if (method === 'POST') {
@@ -65,10 +69,12 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
     try {
       const res = await fetchWithTimeout(url, fetchOptions, FETCH_TIMEOUT_MS);
       const data = await res.text();
-      return new NextResponse(data, {
+      const response = new NextResponse(data, {
         status: res.status,
         headers: { 'Content-Type': res.headers.get('content-type') || 'application/json' },
       });
+      if (res.status === 401) clearAuthCookies(response);
+      return response;
     } catch (err: any) {
       lastError = err.message || String(err);
       // AbortError means timeout — try next URL

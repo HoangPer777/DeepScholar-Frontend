@@ -53,8 +53,35 @@ interface ArticleData {
     authors?: any[];
 }
 
-const POLLING_INTERVAL_MS = 5000;  // Poll every 5 seconds
-const POLLING_MAX_ATTEMPTS = 120;  // Max 10 minutes of polling
+interface PdfJobStatus {
+    status: 'queued' | 'running' | 'completed' | 'failed';
+    task_id: string;
+    slug: string;
+    article_id: number;
+    progress?: {
+        phase: string;
+        message: string;
+        percent: number;
+    };
+    error_code?: string;
+    message?: string;
+    retryable?: boolean;
+    warning?: string;
+}
+
+const POLLING_INTERVAL_MS = 5000;
+const POLLING_MAX_ATTEMPTS = 120;
+const MAX_PDF_SIZE_BYTES = 25 * 1024 * 1024;
+const MAX_PDF_SIZE_MIB = 25;
+const PDF_PHASES = [
+    { key: 'queued', label: 'Queued' },
+    { key: 'starting', label: 'Starting pipeline' },
+    { key: 'downloading', label: 'Reading PDF' },
+    { key: 'extracting', label: 'Extracting content' },
+    { key: 'saving_article', label: 'Saving article' },
+    { key: 'embedding', label: 'Creating embeddings' },
+    { key: 'completed', label: 'Completed' },
+];
 
 function UploadPageContent() {
     const router = useRouter();
@@ -63,6 +90,7 @@ function UploadPageContent() {
     const [step, setStep] = useState<UploadStep>('idle');
     const [progress, setProgress] = useState(0);
     const [statusMsg, setStatusMsg] = useState('');
+    const [pdfJob, setPdfJob] = useState<PdfJobStatus | null>(null);
     const [article, setArticle] = useState<ArticleData | null>(null);
     const [errorMsg, setErrorMsg] = useState('');
     const [isEditing, setIsEditing] = useState(false);
@@ -78,6 +106,7 @@ function UploadPageContent() {
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingAttemptsRef = useRef(0);
     const pollingInFlightRef = useRef(false);
+    const pdfIdempotencyKeyRef = useRef<string | null>(null);
 
     // Clean up polling interval on unmount
     useEffect(() => {
@@ -94,17 +123,11 @@ function UploadPageContent() {
         pollingInFlightRef.current = false;
     };
 
-    /**
-     * Poll the Backend every 5s to check if the AI service has finished
-     * updating title / abstract / content.
-     * 
-     * We consider extraction done when `title` no longer contains "Pending"
-     * and `content` is non-empty.
-     */
-    const startPolling = (slug: string) => {
+    /** Poll the short-lived Backend status endpoint until the AI job is terminal. */
+    const startPolling = (taskId: string, slug: string) => {
         pollingAttemptsRef.current = 0;
         setStep('polling');
-        setStatusMsg('Waiting for AI extraction to complete...');
+        setStatusMsg('Waiting for the AI pipeline to start…');
 
         const pollOnce = async () => {
             if (pollingInFlightRef.current) return;
@@ -113,22 +136,42 @@ function UploadPageContent() {
             pollingAttemptsRef.current += 1;
 
             try {
-                const data: ArticleData = await api.get(`/articles/${slug}/`);
-                const title = typeof data?.title === 'string' ? data.title.trim() : '';
-                const content = typeof data?.content === 'string' ? data.content.trim() : '';
-                const hasPendingTitle = /^pending\b/i.test(title);
-                const extractionDone = title.length > 0 && content.length > 100 && !hasPendingTitle;
+                const data: PdfJobStatus = await api.get(
+                    `/ai/status/?task_id=${encodeURIComponent(taskId)}`,
+                    { cache: 'no-store' },
+                );
+                setPdfJob(data);
+                const phaseMessage = data.progress?.message || 'AI pipeline is processing your PDF…';
+                setStatusMsg(phaseMessage);
+                const phasePercent = Number(data.progress?.percent || 0);
+                setProgress(data.status === 'completed'
+                    ? 100
+                    : Math.min(99, Math.max(75, 75 + Math.round(phasePercent * 0.25))));
 
-                if (extractionDone) {
+                if (data.status === 'completed') {
+                    const updatedArticle: ArticleData = await api.get(`/articles/${slug}/`);
                     stopPolling();
-                    setArticle(data);
+                    setArticle(updatedArticle);
                     setProgress(100);
                     setStep('done');
                     setStatusMsg('Extraction complete!');
                     return;
                 }
-            } catch {
-                // Ignore temporary response errors and continue polling.
+                if (data.status === 'failed') {
+                    stopPolling();
+                    setStep('error');
+                    setErrorMsg(data.message || 'The AI pipeline could not finish processing this PDF.');
+                    return;
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : '';
+                if (message.includes('PDF task not found or expired')) {
+                    stopPolling();
+                    setStep('error');
+                    setErrorMsg('The PDF status expired. Please start the upload again.');
+                    return;
+                }
+                // Short-lived proxy/network failures are retried until the bounded polling window ends.
             } finally {
                 pollingInFlightRef.current = false;
             }
@@ -136,8 +179,8 @@ function UploadPageContent() {
             if (pollingAttemptsRef.current >= POLLING_MAX_ATTEMPTS) {
                 stopPolling();
                 setStep('error');
-                setErrorMsg('AI extraction is still running. Please try checking again shortly.');
-                setStatusMsg('Extraction is taking longer than expected.');
+                setErrorMsg('The AI pipeline is taking longer than expected. Please try checking again shortly.');
+                setStatusMsg('Processing is still running.');
             }
         };
 
@@ -151,6 +194,12 @@ function UploadPageContent() {
         e.preventDefault();
         const droppedFile = e.dataTransfer.files?.[0];
         if (droppedFile?.type === 'application/pdf') {
+            if (droppedFile.size > MAX_PDF_SIZE_BYTES) {
+                setFile(null);
+                setErrorMsg(`PDF files must be ${MAX_PDF_SIZE_MIB} MiB or smaller.`);
+                setStep('error');
+                return;
+            }
             setFile(droppedFile);
         } else {
             alert('Please upload a PDF file.');
@@ -160,6 +209,12 @@ function UploadPageContent() {
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const selected = e.target.files?.[0];
         if (selected?.type === 'application/pdf') {
+            if (selected.size > MAX_PDF_SIZE_BYTES) {
+                setFile(null);
+                setErrorMsg(`PDF files must be ${MAX_PDF_SIZE_MIB} MiB or smaller.`);
+                setStep('error');
+                return;
+            }
             setFile(selected);
         } else if (selected) {
             alert('Please upload a PDF file.');
@@ -190,7 +245,9 @@ function UploadPageContent() {
         setFile(null);
         setStep('idle');
         setProgress(0);
+        setPdfJob(null);
         setArticle(null);
+        pdfIdempotencyKeyRef.current = null;
         setErrorMsg('');
         setStatusMsg('');
         setIsEditing(false);
@@ -233,15 +290,50 @@ function UploadPageContent() {
         }
     };
 
+    const triggerPdfJob = async (targetArticle: ArticleData, idempotencyKey: string) => {
+        setStep('processing');
+        setErrorMsg('');
+        setStatusMsg('Triggering AI extraction pipeline…');
+        const aiData = await api.post('/ai/trigger/', {
+            pdf_url: targetArticle.pdf_url,
+            slug: targetArticle.slug,
+            article_id: targetArticle.id,
+        }, {
+            headers: { 'Idempotency-Key': idempotencyKey },
+        });
+        if (!aiData?.task_id) throw new Error('AI trigger did not return a task ID.');
+        setProgress(75);
+        startPolling(aiData.task_id, targetArticle.slug);
+    };
+
+    const retryPdfTrigger = async () => {
+        if (!article || !pdfIdempotencyKeyRef.current) return;
+        try {
+            await triggerPdfJob(article, pdfIdempotencyKeyRef.current);
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : 'Unable to retry the existing PDF task.';
+            setErrorMsg(msg);
+            setStep('error');
+        }
+    };
+
     const processUpload = async () => {
         if (!file) return;
+        if (file.size > MAX_PDF_SIZE_BYTES) {
+            setErrorMsg(`PDF files must be ${MAX_PDF_SIZE_MIB} MiB or smaller.`);
+            setStep('error');
+            return;
+        }
         setStep('uploading');
         setProgress(10);
         setStatusMsg('Requesting upload URL from server…');
 
         try {
             // ── 1. Get Presigned URL ────────────────────────────────────────
-            const presignData = await api.post('/articles/upload_url/', { file_name: file.name });
+            const presignData = await api.post('/articles/upload_url/', {
+                file_name: file.name,
+                file_size: file.size,
+            });
             const { presigned_url, public_url } = presignData;
             setProgress(25);
             setStatusMsg('Uploading PDF to Cloudflare R2…');
@@ -265,36 +357,9 @@ function UploadPageContent() {
                 slug,
             });
             setArticle(articleData);
+            pdfIdempotencyKeyRef.current = crypto.randomUUID();
             setProgress(65);
-            setStep('processing');
-            setStatusMsg('Triggering AI extraction pipeline…');
-
-            // ── 4. Trigger AI Service pipeline via Backend proxy ───────────
-            // NOTE: We call the Backend's proxy endpoint instead of localhost:8001
-            // directly. This avoids Docker network issues where localhost in the
-            // browser may not resolve to the AI service container.
-            const token = localStorage.getItem('access_token');
-            if (!token) {
-                throw new Error('Your login session has expired. Please login again and retry upload.');
-            }
-            const aiRes = await fetch('/api/ai-proxy/pdf/upload', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    pdf_url: public_url,
-                    slug: articleData.slug,
-                    article_id: articleData.id ?? 1,
-                }),
-            });
-            if (!aiRes.ok) throw new Error(`AI trigger failed: HTTP ${aiRes.status}`);
-
-            setProgress(75);
-
-            // ── 5. Poll the Backend until extracted data is available ───────
-            startPolling(articleData.slug);
+            await triggerPdfJob(articleData, pdfIdempotencyKeyRef.current);
 
         } catch (error) {
             const msg = error instanceof Error ? error.message : 'Unknown error occurred.';
@@ -309,7 +374,7 @@ function UploadPageContent() {
         idle: '',
         uploading: 'Uploading to Cloudflare R2…',
         processing: 'Triggering AI pipeline…',
-        polling: `AI extracting content… (checking every 5s)`,
+        polling: pdfJob?.progress?.message || 'AI pipeline is processing… (checking every 5s)',
         done: 'Extraction complete ✓',
         error: 'An error occurred.',
     }[step];
@@ -481,6 +546,31 @@ function UploadPageContent() {
                                 {statusMsg && (
                                     <p className="text-xs text-slate-400 mt-1">{statusMsg}</p>
                                 )}
+                                {pdfJob && (
+                                    <ol className="mt-4 grid grid-cols-2 gap-2 border-t border-slate-100 pt-4 sm:grid-cols-3" aria-label="PDF processing stages">
+                                        {PDF_PHASES.map((phase, index) => {
+                                            const currentIndex = Math.max(
+                                                0,
+                                                PDF_PHASES.findIndex(item => item.key === pdfJob.progress?.phase),
+                                            );
+                                            const isComplete = step === 'done' || index < currentIndex;
+                                            const isCurrent = !isComplete && index === currentIndex;
+                                            return (
+                                                <li key={phase.key} className="flex items-center gap-2 text-xs font-semibold">
+                                                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] ${isComplete
+                                                        ? 'border-green-500 bg-green-50 text-green-600'
+                                                        : isCurrent
+                                                            ? 'border-[#2513ec] bg-[#2513ec]/10 text-[#2513ec]'
+                                                            : 'border-slate-200 bg-slate-50 text-slate-400'
+                                                        }`}>
+                                                        {isComplete ? '✓' : index + 1}
+                                                    </span>
+                                                    <span className={isCurrent || isComplete ? 'text-slate-700' : 'text-slate-400'}>{phase.label}</span>
+                                                </li>
+                                            );
+                                        })}
+                                    </ol>
+                                )}
                             </div>
                         </div>
                     )}
@@ -490,14 +580,24 @@ function UploadPageContent() {
                         <div className="mb-10 bg-amber-50 border border-amber-200 rounded-xl p-6 flex items-start gap-4">
                             <AlertCircle className="text-amber-500 mt-0.5 shrink-0" size={22} />
                             <div>
-                                <h3 className="font-bold text-amber-700 mb-1">Processing Still In Progress</h3>
+                                <h3 className="font-bold text-amber-700 mb-1">
+                                    {errorMsg.includes('must be') ? 'File rejected' : 'PDF processing failed or timed out'}
+                                </h3>
                                 <p className="text-sm text-amber-700">{errorMsg}</p>
-                                <button
+                                 <button
                                     onClick={resetUpload}
                                     className="mt-3 text-sm font-bold text-amber-700 underline hover:no-underline"
                                 >
                                     Try again
                                 </button>
+                                {article && pdfIdempotencyKeyRef.current && pdfJob?.status !== 'failed' && (
+                                    <button
+                                        onClick={() => void retryPdfTrigger()}
+                                        className="mt-3 ml-4 text-sm font-bold text-[#2513ec] underline hover:no-underline"
+                                    >
+                                        Retry the same PDF task
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
@@ -518,11 +618,11 @@ function UploadPageContent() {
                                     <h3 className="text-xl font-bold">
                                         {file ? file.name : 'Drag & drop your IEEE PDF here'}
                                     </h3>
-                                    <p className="text-slate-500 mt-1">
-                                        {file
-                                            ? `${(file.size / 1024 / 1024).toFixed(2)} MB — Click below to start`
-                                            : 'Supports IEEE format. AI will auto-extract title, abstract and content.'}
-                                    </p>
+                                     <p className="text-slate-500 mt-1">
+                                         {file
+                                             ? `${(file.size / 1024 / 1024).toFixed(2)} MB — Click below to start`
+                                             : `Supports IEEE format. Maximum PDF size: ${MAX_PDF_SIZE_MIB} MiB.`}
+                                     </p>
                                 </div>
                                 {file ? (
                                     <button
@@ -594,7 +694,7 @@ function UploadPageContent() {
                                         />
                                     ) : (
                                         step === 'done' && article?.abstract ? (
-                                            <p className="text-slate-700 leading-relaxed text-sm">{article.abstract}</p>
+                                             <p className="whitespace-pre-wrap break-words text-slate-700 leading-relaxed text-sm">{article.abstract}</p>
                                         ) : (
                                             <div className="space-y-2">
                                                 <div className="h-4 w-full bg-slate-100 rounded animate-pulse" />

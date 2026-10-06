@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
@@ -25,6 +25,24 @@ export default function LoginPage() {
     const safeNext = value && value.startsWith('/') && !value.startsWith('//') ? value : '/';
     router.push(safeNext as Route);
   };
+
+  useEffect(() => {
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const accessToken = hashParams.get('access_token');
+    const state = hashParams.get('state');
+    if (!accessToken || state !== 'facebookdirect') return;
+
+    window.history.replaceState(
+      null,
+      '',
+      `${window.location.pathname}${window.location.search}`,
+    );
+    void authService.facebookLogin(accessToken)
+      .then(redirectAfterLogin)
+      .catch((err: any) => {
+        setError(err.message || 'Facebook login failed.');
+      });
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -211,20 +229,23 @@ export default function LoginPage() {
                 onError={() => {
                   setError('Google Login Failed');
                 }}
-                useOneTap
                 theme="outline"
                 shape="rectangular"
                 text="signin_with"
                 size="large"
-                width="100%"
+                width={400}
               />
             </div>
 
-            <FacebookLogin
-              appId={process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "1234567890-mockappid"}
-              fields="name,email,picture"
-              scope="public_profile,email"
-              callback={handleFacebookSuccess}
+              <FacebookLogin
+                appId={process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || "1234567890-mockappid"}
+                fields="name,picture"
+                scope="public_profile"
+                // Use a full-page OAuth redirect instead of the popup/FedCM path.
+                isMobile={true}
+                redirectUri={typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined}
+                responseType="token"
+                callback={handleFacebookSuccess}
               render={(renderProps: any) => (
                 <button
                   type="button"
