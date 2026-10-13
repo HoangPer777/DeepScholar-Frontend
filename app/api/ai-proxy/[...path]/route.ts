@@ -46,23 +46,33 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
   const aiUrl = resolveAiUrl(); // sync — no probe, no await
   const targetUrl = `${aiUrl}/${finalPath}${search}`;
 
+  const accessToken = req.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
+  if (!accessToken) {
+    const response = NextResponse.json(
+      { detail: 'Authentication required.' },
+      { status: 401, headers: { 'Cache-Control': 'no-store' } },
+    );
+    clearAuthCookies(response);
+    return response;
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': req.headers.get('content-type') || 'application/json',
+    'Cache-Control': 'no-store',
+    'Authorization': `Bearer ${accessToken}`,
   };
-
-  const accessToken = req.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
-  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 
   let body: string | undefined;
   if (method === 'POST') {
     body = await req.text();
   }
 
-  const fetchOptions: RequestInit = { method, headers, body };
+  const fetchOptions: RequestInit = { method, headers, body, cache: 'no-store' };
 
   // Try primary URL first, then Docker service name, then localhost.
   // Each attempt has an individual timeout to prevent hanging.
-  const urlsToTry = buildFallbackChain(aiUrl, targetUrl);
+  // Never replay a POST after a timeout or ambiguous network failure.
+  const urlsToTry = method === 'POST' ? [targetUrl] : buildFallbackChain(aiUrl, targetUrl);
 
   let lastError: string = 'unknown error';
   for (const url of urlsToTry) {
@@ -71,7 +81,10 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
       const data = await res.text();
       const response = new NextResponse(data, {
         status: res.status,
-        headers: { 'Content-Type': res.headers.get('content-type') || 'application/json' },
+        headers: {
+          'Content-Type': res.headers.get('content-type') || 'application/json',
+          'Cache-Control': 'no-store',
+        },
       });
       if (res.status === 401) clearAuthCookies(response);
       return response;
@@ -85,7 +98,7 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
 
   return NextResponse.json(
     { detail: `Cannot reach AI service. Tried: ${urlsToTry.join(', ')}. Last error: ${lastError}` },
-    { status: 502 },
+    { status: 502, headers: { 'Cache-Control': 'no-store' } },
   );
 }
 

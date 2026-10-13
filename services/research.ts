@@ -213,6 +213,9 @@ export async function sendFollowUp(
   question: string,
   sessionId?: string | null,
 ): Promise<FollowUpResponse> {
+  if (typeof window === 'undefined') {
+    throw new ResearchError('Authenticated chat must be started from the browser session.', 'server');
+  }
   const baseUrl = typeof window === 'undefined'
     ? `${process.env.AI_URL || process.env.NEXT_PUBLIC_AI_URL || 'http://localhost:8001/api'}`
     : '/api/ai-proxy';
@@ -224,6 +227,7 @@ export async function sendFollowUp(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question, article_id: null, session_id: sessionId ?? null }),
+      credentials: 'same-origin',
     });
   } catch {
     throw new ResearchError('Cannot reach AI service.', 'network');
@@ -255,7 +259,7 @@ export async function sendFollowUp(
 
     let pollRes: Response;
     try {
-      pollRes = await fetch(pollUrl);
+      pollRes = await fetch(pollUrl, { credentials: 'same-origin', cache: 'no-store' });
     } catch {
       consecutivePollErrors += 1;
       if (consecutivePollErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
@@ -297,6 +301,9 @@ export async function runDeepResearch(
   options: DeepResearchRunOptions = {},
 ): Promise<DeepResearchResponse> {
   const { onProgress, signal } = options;
+  if (typeof window === 'undefined') {
+    throw new ResearchError('Authenticated research must be started from the browser session.', 'server');
+  }
   // Step 1: Start the job
   let startRes: Response;
   try {
@@ -305,6 +312,7 @@ export async function runDeepResearch(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
       signal,
+      credentials: 'same-origin',
     });
   } catch (networkErr: any) {
     throw new ResearchError(
