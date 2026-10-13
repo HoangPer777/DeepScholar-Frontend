@@ -4,6 +4,18 @@ const BASE_URL = typeof window === 'undefined'
   ? (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000/api/v1')
   : '/api/proxy';
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
   const url = `${BASE_URL}${endpoint}`;
   const headers: Record<string, string> = {
@@ -39,7 +51,11 @@ export const fetchWithAuth = async (endpoint: string, options: RequestInit = {})
       }
     }
     
-    throw new Error(errorData.detail || 'API request failed');
+    throw new ApiError(
+      errorData.detail || 'API request failed',
+      response.status,
+      errorData.error_code || errorData.code,
+    );
   }
 
   return response;

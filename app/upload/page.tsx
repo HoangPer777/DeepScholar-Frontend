@@ -1,6 +1,6 @@
 'use client';
 
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import AppSidebar from '@/components/layout/AppSidebar';
 import AuthorGuard from '@/components/auth/AuthorGuard';
 import { useRouter } from 'next/navigation';
@@ -64,6 +64,8 @@ interface PdfJobStatus {
         percent: number;
     };
     error_code?: string;
+    article_saved?: boolean;
+    embeddings_saved?: boolean;
     message?: string;
     retryable?: boolean;
     warning?: string;
@@ -106,25 +108,34 @@ function UploadPageContent() {
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingAttemptsRef = useRef(0);
     const pollingInFlightRef = useRef(false);
+    const pollingGenerationRef = useRef(0);
+    const pollingControllerRef = useRef<AbortController | null>(null);
     const pdfIdempotencyKeyRef = useRef<string | null>(null);
 
     // Clean up polling interval on unmount
     useEffect(() => {
         return () => {
             if (pollingRef.current) clearInterval(pollingRef.current);
+            pollingControllerRef.current?.abort();
+            pollingGenerationRef.current += 1;
         };
     }, []);
 
     const stopPolling = () => {
+        pollingGenerationRef.current += 1;
         if (pollingRef.current) {
             clearInterval(pollingRef.current);
             pollingRef.current = null;
         }
+        pollingControllerRef.current?.abort();
+        pollingControllerRef.current = null;
         pollingInFlightRef.current = false;
     };
 
     /** Poll the short-lived Backend status endpoint until the AI job is terminal. */
     const startPolling = (taskId: string, slug: string) => {
+        stopPolling();
+        const generation = pollingGenerationRef.current;
         pollingAttemptsRef.current = 0;
         setStep('polling');
         setStatusMsg('Waiting for the AI pipeline to start…');
@@ -134,12 +145,21 @@ function UploadPageContent() {
 
             pollingInFlightRef.current = true;
             pollingAttemptsRef.current += 1;
+            const controller = new AbortController();
+            pollingControllerRef.current = controller;
 
             try {
                 const data: PdfJobStatus = await api.get(
                     `/ai/status/?task_id=${encodeURIComponent(taskId)}`,
-                    { cache: 'no-store' },
+                    { cache: 'no-store', signal: controller.signal },
                 );
+                if (generation !== pollingGenerationRef.current) return;
+                if (data.task_id !== taskId || !['queued', 'running', 'completed', 'failed'].includes(data.status)) {
+                    stopPolling();
+                    setStep('error');
+                    setErrorMsg('The server returned an invalid PDF job status.');
+                    return;
+                }
                 setPdfJob(data);
                 const phaseMessage = data.progress?.message || 'AI pipeline is processing your PDF…';
                 setStatusMsg(phaseMessage);
@@ -149,7 +169,11 @@ function UploadPageContent() {
                     : Math.min(99, Math.max(75, 75 + Math.round(phasePercent * 0.25))));
 
                 if (data.status === 'completed') {
-                    const updatedArticle: ArticleData = await api.get(`/articles/${slug}/`);
+                    const updatedArticle: ArticleData = await api.get(`/articles/${slug}/`, {
+                        cache: 'no-store',
+                        signal: controller.signal,
+                    });
+                    if (generation !== pollingGenerationRef.current) return;
                     stopPolling();
                     setArticle(updatedArticle);
                     setProgress(100);
@@ -158,29 +182,51 @@ function UploadPageContent() {
                     return;
                 }
                 if (data.status === 'failed') {
+                    if (data.article_saved) {
+                        try {
+                            const savedArticle: ArticleData = await api.get(`/articles/${slug}/`, {
+                                cache: 'no-store',
+                                signal: controller.signal,
+                            });
+                            if (generation !== pollingGenerationRef.current) return;
+                            setArticle(savedArticle);
+                        } catch {
+                            if (generation !== pollingGenerationRef.current) return;
+                        }
+                    }
                     stopPolling();
                     setStep('error');
-                    setErrorMsg(data.message || 'The AI pipeline could not finish processing this PDF.');
+                    setErrorMsg(data.article_saved
+                        ? 'The article was saved, but embedding processing failed. You can still view the article.'
+                        : data.message || 'The AI pipeline could not finish processing this PDF.');
                     return;
                 }
             } catch (error) {
-                const message = error instanceof Error ? error.message : '';
-                if (message.includes('PDF task not found or expired')) {
+                if (generation !== pollingGenerationRef.current) return;
+                if (error instanceof ApiError && ![503, 504].includes(error.status)) {
                     stopPolling();
                     setStep('error');
-                    setErrorMsg('The PDF status expired. Please start the upload again.');
+                    setErrorMsg(error.status === 404
+                        ? 'The PDF status expired or is unavailable. The article may still be processing.'
+                        : error.status === 401 || error.status === 403
+                            ? 'Your session cannot access this PDF job. Sign in again or contact support.'
+                            : error.message);
                     return;
                 }
-                // Short-lived proxy/network failures are retried until the bounded polling window ends.
+                // Network, 5xx, 503 and 504 errors are retried within the bounded polling window.
             } finally {
-                pollingInFlightRef.current = false;
+                if (generation === pollingGenerationRef.current) {
+                    pollingInFlightRef.current = false;
+                    if (pollingControllerRef.current === controller) pollingControllerRef.current = null;
+                }
             }
 
+            if (generation !== pollingGenerationRef.current) return;
             if (pollingAttemptsRef.current >= POLLING_MAX_ATTEMPTS) {
                 stopPolling();
                 setStep('error');
-                setErrorMsg('The AI pipeline is taking longer than expected. Please try checking again shortly.');
-                setStatusMsg('Processing is still running.');
+                setErrorMsg('The result could not be confirmed yet. The PDF may still be processing; check the article before uploading it again.');
+                setStatusMsg('The final processing state is unknown.');
             }
         };
 
