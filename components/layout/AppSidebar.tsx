@@ -3,14 +3,16 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Atom, Bot, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react';
+import { Atom, Bot, ChevronLeft, ChevronRight, LogOut, Menu, X } from 'lucide-react';
 import { sidebarItems } from './sidebarItems';
+import { authService } from '@/services/auth';
 
 export default function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem('sidebar_collapsed') === 'true');
@@ -23,12 +25,18 @@ export default function AppSidebar() {
     });
   };
 
-  const navigate = (event: React.MouseEvent, href: string, requiresAuth?: boolean) => {
-    if (requiresAuth && !localStorage.getItem('access_token')) {
-      event.preventDefault();
-      router.push(`/login?next=${encodeURIComponent(href)}`);
-    }
+  const navigate = (_event: React.MouseEvent, _href: string) => {
     setMobileOpen(false);
+  };
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await authService.logout();
+    } finally {
+      router.replace('/login');
+    }
   };
 
   const content = (
@@ -46,7 +54,7 @@ export default function AppSidebar() {
               {index === 4 && !collapsed && <p className="px-3 pb-2 pt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">Workspace</p>}
               <Link
                 href={item.href}
-                onClick={(event) => navigate(event, item.href, 'requiresAuth' in item && item.requiresAuth)}
+                onClick={(event) => navigate(event, item.href)}
                 title={collapsed ? item.label : undefined}
                 aria-current={active ? 'page' : undefined}
                 className={`flex items-center rounded-lg px-3 py-2.5 text-sm font-semibold ${collapsed ? 'justify-center' : 'gap-3'} ${active ? 'bg-blue-50 text-[#135bec]' : ('highlight' in item && item.highlight) ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
@@ -60,6 +68,16 @@ export default function AppSidebar() {
       <Link href="/deep-research" className="m-4 flex items-center justify-center gap-2 rounded-lg bg-[#135bec] py-2.5 text-sm font-bold text-white">
         <Bot size={18} />{!collapsed && 'AI Assistant'}
       </Link>
+      <button
+        type="button"
+        onClick={handleLogout}
+        disabled={loggingOut}
+        className={`mx-4 mb-4 flex items-center justify-center rounded-lg py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60 ${collapsed ? '' : 'gap-2'}`}
+        title="Log out"
+      >
+        <LogOut size={18} />
+        {!collapsed && (loggingOut ? 'Logging out…' : 'Log out')}
+      </button>
     </>
   );
 

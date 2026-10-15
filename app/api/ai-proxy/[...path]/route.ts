@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveAiUrl } from './route-helpers';
+import { ACCESS_TOKEN_COOKIE, clearAuthCookies, isSameOriginRequest } from '@/lib/auth-cookies';
 
 export const maxDuration = 60; // Vercel: allow up to 60s per proxy request
 export const dynamic = 'force-dynamic'; // Always read env vars at runtime
@@ -34,6 +35,9 @@ async function fetchWithTimeout(
 async function proxyRequest(req: NextRequest, pathSegments: string[], method: string) {
   const path = pathSegments.join('/');
   const search = req.nextUrl.search;
+  if (method !== 'GET' && !isSameOriginRequest(req)) {
+    return NextResponse.json({ detail: 'Cross-origin request rejected.' }, { status: 403 });
+  }
   
   // Next.js strips trailing slashes, but FastAPI requires it for some endpoints (like /chat/)
   const hasTrailingSlash = req.nextUrl.pathname.endsWith('/') || path === 'chat';
@@ -42,33 +46,48 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
   const aiUrl = resolveAiUrl(); // sync — no probe, no await
   const targetUrl = `${aiUrl}/${finalPath}${search}`;
 
+  const accessToken = req.cookies.get(ACCESS_TOKEN_COOKIE)?.value;
+  if (!accessToken) {
+    const response = NextResponse.json(
+      { detail: 'Authentication required.' },
+      { status: 401, headers: { 'Cache-Control': 'no-store' } },
+    );
+    clearAuthCookies(response);
+    return response;
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': req.headers.get('content-type') || 'application/json',
+    'Cache-Control': 'no-store',
+    'Authorization': `Bearer ${accessToken}`,
   };
-
-  const auth = req.headers.get('authorization');
-  if (auth) headers['Authorization'] = auth;
 
   let body: string | undefined;
   if (method === 'POST') {
     body = await req.text();
   }
 
-  const fetchOptions: RequestInit = { method, headers, body };
+  const fetchOptions: RequestInit = { method, headers, body, cache: 'no-store' };
 
   // Try primary URL first, then Docker service name, then localhost.
   // Each attempt has an individual timeout to prevent hanging.
-  const urlsToTry = buildFallbackChain(aiUrl, targetUrl);
+  // Never replay a POST after a timeout or ambiguous network failure.
+  const urlsToTry = method === 'POST' ? [targetUrl] : buildFallbackChain(aiUrl, targetUrl);
 
   let lastError: string = 'unknown error';
   for (const url of urlsToTry) {
     try {
       const res = await fetchWithTimeout(url, fetchOptions, FETCH_TIMEOUT_MS);
       const data = await res.text();
-      return new NextResponse(data, {
+      const response = new NextResponse(data, {
         status: res.status,
-        headers: { 'Content-Type': res.headers.get('content-type') || 'application/json' },
+        headers: {
+          'Content-Type': res.headers.get('content-type') || 'application/json',
+          'Cache-Control': 'no-store',
+        },
       });
+      if (res.status === 401) clearAuthCookies(response);
+      return response;
     } catch (err: any) {
       lastError = err.message || String(err);
       // AbortError means timeout — try next URL
@@ -79,7 +98,7 @@ async function proxyRequest(req: NextRequest, pathSegments: string[], method: st
 
   return NextResponse.json(
     { detail: `Cannot reach AI service. Tried: ${urlsToTry.join(', ')}. Last error: ${lastError}` },
-    { status: 502 },
+    { status: 502, headers: { 'Cache-Control': 'no-store' } },
   );
 }
 

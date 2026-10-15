@@ -22,12 +22,14 @@ import {
 } from 'lucide-react';
 import NotificationDropdown from '@/components/NotificationDropdown';
 import ResearchResults from '@/components/deep-research/ResearchResults';
+import FastChatMarkdown from '@/components/deep-research/FastChatMarkdown';
 import {
   runDeepResearch,
   sendFollowUp,
   type DeepResearchResponse,
   type DeepResearchPendingResponse,
   type ResearchActivity,
+  type ResearchAgentOutputs,
   type ResearchProgress,
   type ResearchSourcePreview,
   type FollowUpResponse,
@@ -46,6 +48,7 @@ type ResearchTurn = {
   progress: ResearchProgress | null;
   activities: ResearchActivity[];
   sourcePreviews: ResearchSourcePreview[];
+  agentOutputs: ResearchAgentOutputs | null;
 };
 
 type FollowUpTurn = {
@@ -233,6 +236,7 @@ export default function DeepResearchPage() {
       progress: null,
       activities: [],
       sourcePreviews: [],
+      agentOutputs: null,
     }]);
 
     try {
@@ -255,18 +259,29 @@ export default function DeepResearchPage() {
           progress: result.progress ?? turn.progress,
           activities: mergeActivities(turn.activities, result.activities),
           sourcePreviews: mergeSourcePreviews(turn.sourcePreviews, result.source_previews),
+          agentOutputs: result.agent_outputs ?? null,
         };
       }));
     } catch (err: any) {
+      const researchError = err instanceof ResearchError ? err : null;
       setError(err.message || 'Something went wrong');
-      setErrorType(err instanceof ResearchError ? err.type : 'server');
-      setRetryAfter(err instanceof ResearchError ? err.retryAfter ?? null : null);
+      setErrorType(researchError?.type ?? 'server');
+      setRetryAfter(researchError?.retryAfter ?? null);
       
-      setTurns((prev) => prev.map((t, i) => i === newTurnIndex ? {
-         ...t, loading: false, error: err.message || 'Something went wrong',
-        errorType: err instanceof ResearchError ? err.type : 'server',
-        retryAfter: err instanceof ResearchError ? err.retryAfter ?? null : null
-      } : t));
+      setTurns((prev) => prev.map((t, i) => {
+        if (i !== newTurnIndex || t.kind !== 'research') return t;
+        return {
+          ...t,
+          loading: false,
+          error: err.message || 'Something went wrong',
+          errorType: researchError?.type ?? 'server',
+          retryAfter: researchError?.retryAfter ?? null,
+          progress: researchError?.progress ?? t.progress,
+          activities: mergeActivities(t.activities, researchError?.activities),
+          sourcePreviews: mergeSourcePreviews(t.sourcePreviews, researchError?.sourcePreviews),
+          agentOutputs: researchError?.agentOutputs ?? t.agentOutputs,
+        };
+      }));
     } finally {
       setLoading(false);
     }
@@ -657,17 +672,25 @@ function HistoryRow({
 function TurnBlock({ turn }: { turn: ChatTurn }) {
   if (turn.kind === 'research') {
     return (
-      <ResearchResults
-        query={turn.query}
-        data={turn.data}
-        loading={turn.loading}
-        error={turn.error}
-        errorType={turn.errorType}
-        retryAfter={turn.retryAfter}
-        progress={turn.progress}
-        activities={turn.activities}
-        sourcePreviews={turn.sourcePreviews}
-      />
+      <>
+        {turn.data?.review_status === 'rejected' && (
+          <div className="mx-auto mt-3 w-full max-w-[1176px] px-4 text-xs text-amber-800" role="status">
+            This research draft was not accepted by the reviewer. Fast Chat can still use it as context; answers may reflect its limitations.
+          </div>
+        )}
+        <ResearchResults
+          query={turn.query}
+          data={turn.data}
+          loading={turn.loading}
+          error={turn.error}
+          errorType={turn.errorType}
+          retryAfter={turn.retryAfter}
+          progress={turn.progress}
+          activities={turn.activities}
+          sourcePreviews={turn.sourcePreviews}
+          agentOutputs={turn.agentOutputs}
+        />
+      </>
     );
   } else {
     return <FollowUpBlock turn={turn} />;
@@ -710,12 +733,7 @@ function FollowUpBlock({ turn }: { turn: FollowUpTurn }) {
                   FastChatAgent · Fast Reply
                 </div>
               )}
-              <div className="prose prose-sm md:prose-base prose-slate max-w-none prose-a:text-[#135bec] hover:prose-a:underline">
-                {turn.data.answer.split('\n').map((line, i) => {
-                  if (!line.trim()) return <br key={i} />;
-                  return <p key={i} className="mb-2 leading-relaxed text-slate-700">{line}</p>;
-                })}
-              </div>
+              <FastChatMarkdown content={turn.data.answer} />
 
               {turn.data.citations && turn.data.citations.length > 0 && (
                 <div className="mt-6 space-y-3 border-t border-slate-100 pt-6">

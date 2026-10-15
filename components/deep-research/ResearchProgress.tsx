@@ -21,6 +21,7 @@ import type { LucideIcon } from 'lucide-react';
 import type {
   ResearchActivity,
   ResearchAgent,
+  ResearchAgentOutputs,
   ResearchPhase,
   ResearchProgress as ResearchProgressData,
   ResearchSourcePreview,
@@ -30,6 +31,7 @@ interface ResearchProgressProps {
   progress?: ResearchProgressData | null;
   activities?: ResearchActivity[];
   sourcePreviews?: ResearchSourcePreview[];
+  agentOutputs?: ResearchAgentOutputs | null;
   terminalLayout?: 'default' | 'summary' | 'details';
   traceOpen?: boolean;
   onTraceToggle?: () => void;
@@ -352,6 +354,7 @@ interface AgentSupplementProps {
   sourceFilter: 'all' | 'academic' | 'web';
   onSourceFilterChange: (filter: 'all' | 'academic' | 'web') => void;
   showResearcherSources: boolean;
+  agentOutputs?: ResearchAgentOutputs | null;
 }
 
 function AgentSupplement({
@@ -362,6 +365,7 @@ function AgentSupplement({
   sourceFilter,
   onSourceFilterChange,
   showResearcherSources,
+  agentOutputs,
 }: AgentSupplementProps) {
   const agent = getAgent(activity);
   const queries = getQueryMetadata(activity);
@@ -409,6 +413,19 @@ function AgentSupplement({
     );
   }
 
+  if (agent === 'writer' && activity.state === 'completed') {
+    const draft = agentOutputs?.drafts.find((item) => activity.title === `Draft ${item.iteration} complete`);
+    if (draft) {
+      return (
+        <details className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/50 px-2.5 py-2">
+          <summary className="cursor-pointer text-[10px] font-black uppercase tracking-[0.14em] text-indigo-700">Show draft {draft.iteration}</summary>
+          <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap border-t border-indigo-100 pt-2 font-sans text-[11px] leading-relaxed text-slate-600">{draft.content}</pre>
+          {draft.truncated && <p className="mt-2 text-[10px] font-bold text-indigo-700">Draft was truncated for display.</p>}
+        </details>
+      );
+    }
+  }
+
   if (agent === 'reviewer' && activity.state === 'completed') {
     const score = getNumberMetadata(activity, 'score');
     const decision = getStringMetadata(activity, 'decision');
@@ -430,6 +447,7 @@ export default function ResearchProgress({
   progress,
   activities = [],
   sourcePreviews = [],
+  agentOutputs,
   terminalLayout = 'default',
   traceOpen,
   onTraceToggle,
@@ -688,6 +706,7 @@ export default function ResearchProgress({
                           sourceFilter={sourceFilter}
                           onSourceFilterChange={setSourceFilter}
                           showResearcherSources={activity.sequence === latestResearcherSequence}
+                          agentOutputs={agentOutputs}
                         />
                       </div>
                     </li>

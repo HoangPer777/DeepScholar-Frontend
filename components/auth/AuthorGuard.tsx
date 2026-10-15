@@ -15,13 +15,11 @@ export default function AuthorGuard({ children }: { children: React.ReactNode })
     let active = true;
     const checkAccess = async () => {
       const destination = `${pathname}${window.location.search}`;
-      if (!localStorage.getItem('access_token')) {
-        router.replace(`/login?next=${encodeURIComponent(destination)}`);
-        return;
-      }
       try {
-        const user = await api.get('/auth/me/') as AuthUser;
-        localStorage.setItem('user', JSON.stringify(user));
+        const user = await api.get('/auth/me') as AuthUser;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('user', JSON.stringify(user));
+        }
         const isAuthor = user.role === 'author'
           && Boolean(user.author_profile)
           && user.author_profile?.is_active !== false;
@@ -31,7 +29,7 @@ export default function AuthorGuard({ children }: { children: React.ReactNode })
         }
         if (active) setAllowed(true);
       } catch {
-        // Expired-token redirects are handled by the shared API helper.
+        if (active) router.replace(`/login?next=${encodeURIComponent(destination)}`);
       }
     };
     checkAccess();

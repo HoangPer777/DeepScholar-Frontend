@@ -13,10 +13,18 @@ export type ResearchErrorType = 'rate_limit' | 'network' | 'server';
 export class ResearchError extends Error {
   type: ResearchErrorType;
   retryAfter?: number; // seconds
-  constructor(message: string, type: ResearchErrorType, retryAfter?: number) {
+  progress?: ResearchProgress;
+  activities?: ResearchActivity[];
+  sourcePreviews?: ResearchSourcePreview[];
+  agentOutputs?: ResearchAgentOutputs;
+  constructor(message: string, type: ResearchErrorType, retryAfter?: number, trace?: ResearchErrorTrace) {
     super(message);
     this.type = type;
     this.retryAfter = retryAfter;
+    this.progress = trace?.progress;
+    this.activities = trace?.activities;
+    this.sourcePreviews = trace?.source_previews;
+    this.agentOutputs = trace?.agent_outputs;
   }
 }
 
@@ -81,6 +89,38 @@ export interface DeepResearchPendingResponse {
   source_previews?: ResearchSourcePreview[];
 }
 
+export interface DeepResearchErrorResponse {
+  status: 'error';
+  error_code: string;
+  message: string;
+  retryable?: boolean;
+  progress?: ResearchProgress;
+  activities?: ResearchActivity[];
+  source_previews?: ResearchSourcePreview[];
+  agent_outputs?: ResearchAgentOutputs;
+}
+
+export interface ResearchDraft {
+  iteration: number;
+  content: string;
+  truncated: boolean;
+}
+
+export interface ResearchReview {
+  iteration: number;
+  score: number;
+  decision: 'accept' | 'rewrite' | 'rejected';
+  feedback: string;
+  truncated: boolean;
+}
+
+export interface ResearchAgentOutputs {
+  drafts: ResearchDraft[];
+  reviews: ResearchReview[];
+}
+
+type ResearchErrorTrace = Pick<DeepResearchErrorResponse, 'progress' | 'activities' | 'source_previews' | 'agent_outputs'>;
+
 export interface DeepResearchRunOptions {
   onProgress?: (snapshot: DeepResearchPendingResponse) => void;
   signal?: AbortSignal;
@@ -137,6 +177,9 @@ export interface DeepResearchResponse {
   model_usage?: Record<string, ResearchModelInfo>;
   decision: string;
   review_feedback: string | null;
+  review_status?: 'accepted' | 'rejected';
+  fast_chat_ready?: boolean;
+  agent_outputs?: ResearchAgentOutputs;
   progress?: ResearchProgress;
   activities?: ResearchActivity[];
   source_previews?: ResearchSourcePreview[];
@@ -172,6 +215,9 @@ export async function sendFollowUp(
   question: string,
   sessionId?: string | null,
 ): Promise<FollowUpResponse> {
+  if (typeof window === 'undefined') {
+    throw new ResearchError('Authenticated chat must be started from the browser session.', 'server');
+  }
   const baseUrl = typeof window === 'undefined'
     ? `${process.env.AI_URL || process.env.NEXT_PUBLIC_AI_URL || 'http://localhost:8001/api'}`
     : '/api/ai-proxy';
@@ -183,6 +229,7 @@ export async function sendFollowUp(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question, article_id: null, session_id: sessionId ?? null }),
+      credentials: 'same-origin',
     });
   } catch {
     throw new ResearchError('Cannot reach AI service.', 'network');
@@ -214,7 +261,7 @@ export async function sendFollowUp(
 
     let pollRes: Response;
     try {
-      pollRes = await fetch(pollUrl);
+      pollRes = await fetch(pollUrl, { credentials: 'same-origin', cache: 'no-store' });
     } catch {
       consecutivePollErrors += 1;
       if (consecutivePollErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
@@ -225,7 +272,9 @@ export async function sendFollowUp(
     consecutivePollErrors = 0;
 
     if (pollRes.status === 404) {
-      throw new ResearchError('Chat task not found — server may have restarted.', 'server');
+      const err = await pollRes.json().catch(() => ({ detail: pollRes.statusText }));
+      const detail = typeof err.detail === 'string' ? err.detail : pollRes.statusText;
+      throw new ResearchError(`Chat unavailable: ${detail || 'task or research context was not found.'}`, 'server');
     }
 
     if (!pollRes.ok) {
@@ -256,6 +305,9 @@ export async function runDeepResearch(
   options: DeepResearchRunOptions = {},
 ): Promise<DeepResearchResponse> {
   const { onProgress, signal } = options;
+  if (typeof window === 'undefined') {
+    throw new ResearchError('Authenticated research must be started from the browser session.', 'server');
+  }
   // Step 1: Start the job
   let startRes: Response;
   try {
@@ -264,6 +316,7 @@ export async function runDeepResearch(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query }),
       signal,
+      credentials: 'same-origin',
     });
   } catch (networkErr: any) {
     throw new ResearchError(
@@ -333,9 +386,17 @@ export async function runDeepResearch(
       throw new ResearchError(`AI service error: ${detail}`, 'server');
     }
 
-    const data = await pollRes.json() as DeepResearchPendingResponse | DeepResearchResponse;
+    const data = await pollRes.json() as DeepResearchPendingResponse | DeepResearchResponse | DeepResearchErrorResponse;
     if (data.status === 'done') {
       return data as DeepResearchResponse;
+    }
+    if (data.status === 'error') {
+      throw new ResearchError(
+        data.message || 'Deep Research could not complete with verified evidence.',
+        'server',
+        undefined,
+        data,
+      );
     }
     if (data.status === 'pending') {
       onProgress?.(data);

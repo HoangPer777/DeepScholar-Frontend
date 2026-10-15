@@ -186,6 +186,20 @@ assert(
   'abstract block is excluded from the body without hiding later sections',
   'Abstract body exclusion or bold section boundary detection is missing',
 );
+assert(
+  resultsSource.includes('function AgentOutputsDetails')
+    && resultsSource.includes('<details')
+    && resultsSource.includes('Unverified — not published'),
+  'writer drafts and reviewer feedback are available in a collapsed trace panel',
+  'Agent output details panel is missing or exposes rejected drafts as final output',
+);
+assert(
+  researchSource.includes('agent_outputs?: ResearchAgentOutputs;')
+    && researchSource.includes('agentOutputs?: ResearchAgentOutputs;')
+    && pageSource.includes('agentOutputs: researchError?.agentOutputs ?? t.agentOutputs'),
+  'rejected research responses preserve agent output trace data',
+  'Agent output trace is lost when the research endpoint returns an error',
+);
 
 assert(
   !/[À-ỹ]/.test(pageSource)

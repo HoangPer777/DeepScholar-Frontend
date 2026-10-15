@@ -44,8 +44,8 @@ export const interactionsService = {
   },
 };
 
-/** Returns true if a JWT access token is stored (user is logged in) */
+/** Returns true when the UI has a non-authoritative signed-in user hint. */
 export const isLoggedIn = (): boolean => {
   if (typeof window === 'undefined') return false;
-  return !!localStorage.getItem('access_token');
+  return !!localStorage.getItem('user');
 };

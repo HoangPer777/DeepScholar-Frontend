@@ -23,7 +23,7 @@ export default function NotificationDropdown() {
 
   const fetchNotifications = useCallback(async () => {
     // Only fetch if logged in
-    if (typeof window === 'undefined' || !localStorage.getItem('access_token')) return;
+    if (typeof window === 'undefined' || !localStorage.getItem('user')) return;
     setLoading(true);
     try {
       const data = await api.get('/notifications/');

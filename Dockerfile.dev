@@ -7,4 +7,4 @@ RUN npm install --legacy-peer-deps
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", "3000"]
+CMD ["npm", "run", "dev", "--", "--experimental-https", "-H", "0.0.0.0", "-p", "3000"]
