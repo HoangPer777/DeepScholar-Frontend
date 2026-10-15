@@ -177,6 +177,8 @@ export interface DeepResearchResponse {
   model_usage?: Record<string, ResearchModelInfo>;
   decision: string;
   review_feedback: string | null;
+  review_status?: 'accepted' | 'rejected';
+  fast_chat_ready?: boolean;
   agent_outputs?: ResearchAgentOutputs;
   progress?: ResearchProgress;
   activities?: ResearchActivity[];
@@ -270,7 +272,9 @@ export async function sendFollowUp(
     consecutivePollErrors = 0;
 
     if (pollRes.status === 404) {
-      throw new ResearchError('Chat task not found — server may have restarted.', 'server');
+      const err = await pollRes.json().catch(() => ({ detail: pollRes.statusText }));
+      const detail = typeof err.detail === 'string' ? err.detail : pollRes.statusText;
+      throw new ResearchError(`Chat unavailable: ${detail || 'task or research context was not found.'}`, 'server');
     }
 
     if (!pollRes.ok) {
